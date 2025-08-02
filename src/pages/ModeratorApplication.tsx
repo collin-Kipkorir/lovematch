@@ -207,29 +207,23 @@ const ModeratorApplication: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <Button 
-            variant="ghost" 
-            onClick={() => navigate('/')}
-            className="mb-4"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Home
-          </Button>
-          
-          <div className="text-center">
-            <h1 className="text-4xl font-bold mb-4">
-              Become a Moderator
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/10">
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* Hero Section */}
+        <div className="text-center mb-16">
+          <div className="mb-8">
+            <Badge className="mb-4 bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">
+              🌍 Work From Anywhere
+            </Badge>
+            <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary via-primary to-secondary bg-clip-text text-transparent">
+              Become a Chat Moderator
             </h1>
-            <p className="text-xl text-muted-foreground mb-6">
-              Join our team and help create meaningful connections
+            <p className="text-xl md:text-2xl text-muted-foreground mb-8 max-w-3xl mx-auto leading-relaxed">
+              Join our global team of remote chat moderators and help create meaningful connections while earning competitive income from anywhere in the world
             </p>
             
             {referralInfo && referralInfo.isValid && (
-              <Card className="mb-6 bg-primary/5 border-primary/20">
+              <Card className="mb-8 bg-gradient-to-r from-primary/10 to-secondary/10 border-primary/20 max-w-md mx-auto">
                 <CardContent className="pt-6">
                   <div className="flex items-center justify-center gap-2 text-primary">
                     <Users className="w-5 h-5" />
@@ -244,38 +238,110 @@ const ModeratorApplication: React.FC = () => {
           </div>
         </div>
 
-        {/* Benefits Section */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
-          <Card>
+        {/* Key Benefits */}
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+          <Card className="border-primary/20 hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10">
             <CardContent className="pt-6 text-center">
-              <DollarSign className="w-8 h-8 mx-auto mb-3 text-primary" />
-              <h3 className="font-semibold mb-2">Competitive Earnings</h3>
+              <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center">
+                <DollarSign className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">$15-25/Hour</h3>
               <p className="text-sm text-muted-foreground">
-                Earn $15-25/hour based on experience and performance
+                Competitive hourly rates with performance bonuses
               </p>
             </CardContent>
           </Card>
           
-          <Card>
+          <Card className="border-primary/20 hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10">
             <CardContent className="pt-6 text-center">
-              <Clock className="w-8 h-8 mx-auto mb-3 text-primary" />
-              <h3 className="font-semibold mb-2">Flexible Schedule</h3>
+              <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-secondary to-secondary/70 rounded-full flex items-center justify-center">
+                <Clock className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">100% Remote</h3>
               <p className="text-sm text-muted-foreground">
-                Work when it suits you with flexible hours
+                Work from home with flexible scheduling options
               </p>
             </CardContent>
           </Card>
           
-          <Card>
+          <Card className="border-primary/20 hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10">
             <CardContent className="pt-6 text-center">
-              <Users className="w-8 h-8 mx-auto mb-3 text-primary" />
-              <h3 className="font-semibold mb-2">Make Impact</h3>
+              <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-primary to-secondary rounded-full flex items-center justify-center">
+                <Users className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Make Impact</h3>
               <p className="text-sm text-muted-foreground">
-                Help people find meaningful relationships
+                Help people find love and meaningful relationships
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-primary/20 hover:border-primary/40 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10">
+            <CardContent className="pt-6 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">Quick Start</h3>
+              <p className="text-sm text-muted-foreground">
+                Get hired fast with our streamlined process
               </p>
             </CardContent>
           </Card>
         </div>
+
+        {/* Requirements Section */}
+        <Card className="mb-16 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 border-blue-200/50">
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl text-blue-900">What You Need to Get Started</CardTitle>
+            <CardDescription className="text-blue-700">
+              Simple requirements to join our remote moderator team
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-8">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <CheckCircle className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-blue-900">Good Smartphone or Laptop</h4>
+                    <p className="text-sm text-blue-700">Modern device capable of running chat applications smoothly</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <CheckCircle className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-blue-900">Reliable Internet Connection</h4>
+                    <p className="text-sm text-blue-700">Stable broadband connection for consistent communication</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <CheckCircle className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-blue-900">Excellent Communication Skills</h4>
+                    <p className="text-sm text-blue-700">Empathy, patience, and professional writing abilities</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <CheckCircle className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-blue-900">18+ Years Old</h4>
+                    <p className="text-sm text-blue-700">Legal age requirement for handling relationship conversations</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Application Form */}
         <Card>
