@@ -245,9 +245,9 @@ const ModeratorApplication: React.FC = () => {
               <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center">
                 <DollarSign className="w-8 h-8 text-white" />
               </div>
-              <h3 className="font-bold text-lg mb-2">$15-25/Hour</h3>
+              <h3 className="font-bold text-lg mb-2">Up to Ksh. 1,000/Day</h3>
               <p className="text-sm text-muted-foreground">
-                Competitive hourly rates with performance bonuses
+                Earn based on your effort and performance
               </p>
             </CardContent>
           </Card>

@@ -13,6 +13,7 @@ import ModeratorEarnings from '@/components/Admin/ModeratorEarnings';
 import ModeratorReferrals from '@/components/Admin/ModeratorReferrals';
 import SuperAdminEarnings from '@/components/Admin/SuperAdminEarnings';
 import PaymentRequests from '@/components/Admin/PaymentRequests';
+import ModeratorApplications from '@/components/Admin/ModeratorApplications';
 
 /**
  * ADMIN PANEL - BACKEND INTEGRATION GUIDE
@@ -104,6 +105,7 @@ const Admin: React.FC = () => {
         <Route path="dummy-profiles" element={<DummyProfileManager />} />
         <Route path="admin-management" element={<AdminManagement />} />
         <Route path="super-earnings" element={<SuperAdminEarnings />} />
+        <Route path="moderator-applications" element={<ModeratorApplications />} />
       </Routes>
     </AdminLayout>
   );

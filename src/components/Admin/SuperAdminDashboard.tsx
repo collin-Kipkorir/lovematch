@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { 
   Users, 
@@ -93,7 +94,7 @@ const SuperAdminDashboard: React.FC = () => {
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard
           title="Total Earnings"
-          value={`KSh ${(587500).toLocaleString()}`}
+          value={`Ksh. ${(587500).toLocaleString()}`}
           description="From credit sales"
           icon={DollarSign}
           trend="+12.5% this month"
@@ -101,7 +102,7 @@ const SuperAdminDashboard: React.FC = () => {
         />
         <StatCard
           title="Today's Revenue"
-          value={`KSh ${(23400).toLocaleString()}`}
+          value={`Ksh. ${(23400).toLocaleString()}`}
           description="Credit purchases today"
           icon={CreditCard}
           trend="+15% vs yesterday"
@@ -110,7 +111,7 @@ const SuperAdminDashboard: React.FC = () => {
         <StatCard
           title="Monthly Target"
           value="78%"
-          description="KSh 750,000 target"
+          description="Ksh. 750,000 target"
           icon={TrendingUp}
           trend="On track"
           color="default"
@@ -145,7 +146,7 @@ const SuperAdminDashboard: React.FC = () => {
               </div>
               <div className="text-right">
                 <div className="text-2xl font-bold">{stats.creditsSpentToday}</div>
-                <div className="text-xs text-muted-foreground">$2,340 revenue</div>
+                <div className="text-xs text-muted-foreground">Ksh. 234,000 revenue</div>
               </div>
             </div>
 
@@ -204,6 +205,60 @@ const SuperAdminDashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Moderator Applications Section */}
+      <Card className="col-span-full">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2">
+            <Users className="h-5 w-5 text-primary" />
+            <span>Recent Moderator Applications</span>
+          </CardTitle>
+          <CardDescription>
+            Latest applications for moderator positions - quick review
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {/* TODO: Backend Integration - Replace with real applications data */}
+            {[
+              { name: 'Sarah Johnson', email: 'sarah.j@email.com', experience: '2-3 years', status: 'pending', time: '2h ago' },
+              { name: 'Michael Ochieng', email: 'michael.o@email.com', experience: '1-2 years', status: 'approved', time: '5h ago' },
+              { name: 'Grace Wanjiku', email: 'grace.w@email.com', experience: '3-5 years', status: 'interview_scheduled', time: '1d ago' },
+            ].map((app, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-card/50 rounded-lg border border-border/50 hover:bg-card/80 transition-colors">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                    <Users className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">{app.name}</p>
+                    <p className="text-sm text-muted-foreground">{app.email} • {app.experience} experience</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <Badge 
+                    variant={app.status === 'approved' ? 'default' : app.status === 'pending' ? 'secondary' : 'outline'}
+                    className={
+                      app.status === 'approved' ? 'bg-green-100 text-green-800' :
+                      app.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-blue-100 text-blue-800'
+                    }
+                  >
+                    {app.status === 'approved' ? 'Approved' : 
+                     app.status === 'pending' ? 'Pending' : 'Interview Scheduled'}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">{app.time}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 text-center">
+            <Button variant="outline" size="sm">
+              View All Applications
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Alerts and Flags */}
       <div className="grid gap-4 md:grid-cols-2">

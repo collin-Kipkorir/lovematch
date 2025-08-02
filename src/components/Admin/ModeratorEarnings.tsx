@@ -89,8 +89,8 @@ const ModeratorEarnings: React.FC = () => {
         <div className="mt-2 text-xs text-muted-foreground space-y-1">
           <p>• Earn 30% commission on credits purchased by assigned users</p>
           <p>• Earn 5% commission on monthly earnings from your referrals</p>
-          <p>• Earnings ≥ KSh 1,000 are processed for payment</p>
-          <p>• Earnings &lt; KSh 1,000 accumulate until threshold is met</p>
+          <p>• Earnings ≥ Ksh. 1,000 are processed for payment</p>
+          <p>• Earnings &lt; Ksh. 1,000 accumulate until threshold is met</p>
         </div>
       </div>
 
@@ -166,25 +166,25 @@ const ModeratorEarnings: React.FC = () => {
               <div className="space-y-3">
                 {/* TODO: Backend - Fetch payment thresholds from API */}
                 <div className="group p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 hover:shadow-card transition-all duration-300">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
-                    <div className="flex-1">
-                      <p className="font-medium text-green-700">Ready for Payment</p>
-                      <p className="text-sm text-muted-foreground">≥ KSh 1,000: Automatically processed</p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
+                      <div className="flex-1">
+                        <p className="font-medium text-green-700">Ready for Payment</p>
+                        <p className="text-sm text-muted-foreground">≥ Ksh. 1,000: Automatically processed</p>
+                      </div>
+                      <CheckCircle className="h-5 w-5 text-green-500" />
                     </div>
-                    <CheckCircle className="h-5 w-5 text-green-500" />
-                  </div>
                 </div>
                 
                 <div className="group p-4 bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 hover:shadow-card transition-all duration-300">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 bg-yellow-500 rounded-full animate-pulse"></div>
-                    <div className="flex-1">
-                      <p className="font-medium text-yellow-700">Accumulating</p>
-                      <p className="text-sm text-muted-foreground">&lt; KSh 1,000: Held until threshold met</p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 bg-yellow-500 rounded-full animate-pulse"></div>
+                      <div className="flex-1">
+                        <p className="font-medium text-yellow-700">Accumulating</p>
+                        <p className="text-sm text-muted-foreground">&lt; Ksh. 1,000: Held until threshold met</p>
+                      </div>
+                      <Clock className="h-5 w-5 text-yellow-500" />
                     </div>
-                    <Clock className="h-5 w-5 text-yellow-500" />
-                  </div>
                 </div>
               </div>
             </div>
