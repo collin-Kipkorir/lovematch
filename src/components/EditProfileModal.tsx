@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { X, Plus } from 'lucide-react';
+import { storage } from '@/lib/firebase';
+import { ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -23,22 +25,136 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onClose }) 
     age: user?.age || 18,
     bio: user?.bio || '',
     location: user?.location || '',
-    interests: user?.interests || []
+    interests: user?.interests || [],
+    profileImage: user?.profileImage || ''
   });
   
   const [newInterest, setNewInterest] = useState('');
+  const [imagePreview, setImagePreview] = useState<string | null>(user?.profileImage || null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const lastFileRef = useRef<File | null>(null);
 
-  const handleSave = () => {
-    if (updateUser) {
-      updateUser({
-        ...user!,
-        ...formData
-      });
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!updateUser) return;
+    setSaving(true);
+    try {
+      // Only send the form fields to avoid non-serializable values coming from `user` (eg CryptoKey)
+      await updateUser({ ...formData });
       toast({
-        title: "Profile Updated",
-        description: "Your profile has been successfully updated!"
+        title: 'Profile Updated',
+        description: 'Your profile has been successfully updated!'
       });
       onClose();
+    } catch (err) {
+      console.error('Failed to save profile', err);
+      toast({ title: 'Error', description: 'Failed to save profile', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+  const uploadToStorage = (file: File, filename: string, onProgress: (pct: number) => void) => {
+    return new Promise<string>((resolve, reject) => {
+      const sRef = storageRef(storage, filename);
+      const task = uploadBytesResumable(sRef, file);
+      task.on('state_changed', snapshot => {
+        const pct = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
+        onProgress(pct);
+      }, error => {
+        reject(error);
+      }, async () => {
+        try {
+          const url = await getDownloadURL(task.snapshot.ref);
+          resolve(url);
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+  };
+
+  const handleImageFile = async (file?: File) => {
+    if (!file) return;
+    lastFileRef.current = file;
+    setUploadError(null);
+
+    // show local preview immediately
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        setImagePreview(result);
+      };
+      reader.readAsDataURL(file);
+    } catch (e) {
+      // ignore preview errors
+    }
+
+    if (!user) return;
+    const previousImageUrl = user.profileImage || null;
+
+    setUploading(true);
+    setUploadProgress(0);
+
+    const maxAttempts = 3;
+    let attempt = 0;
+  let lastError: unknown = null;
+    try {
+      while (attempt < maxAttempts) {
+        attempt += 1;
+        try {
+          const filename = `profileImages/${user.id}_${Date.now()}`;
+          const url = await uploadToStorage(file, filename, (pct) => setUploadProgress(pct));
+
+          // Update preview and form data
+          setImagePreview(url);
+          setFormData(prev => ({ ...prev, profileImage: url }));
+
+          // Attempt to delete previous image (best-effort, don't block)
+          try {
+            if (previousImageUrl && previousImageUrl !== url && previousImageUrl.includes('firebasestorage.googleapis.com')) {
+              const oIndex = previousImageUrl.indexOf('/o/');
+              if (oIndex !== -1) {
+                const afterO = previousImageUrl.substring(oIndex + 3);
+                const qIndex = afterO.indexOf('?');
+                const encodedPath = qIndex === -1 ? afterO : afterO.substring(0, qIndex);
+                const storagePath = decodeURIComponent(encodedPath);
+                const prevRef = storageRef(storage, storagePath);
+                await deleteObject(prevRef).catch(err => console.warn('Failed to delete previous profile image from storage:', err));
+              }
+            }
+          } catch (e) {
+            console.warn('Error while attempting to delete previous profile image:', e);
+          }
+
+          lastError = null;
+          break; // success
+        } catch (err) {
+          lastError = err;
+          console.warn(`Upload attempt ${attempt} failed:`, err);
+          // If not last attempt, wait with exponential backoff
+          if (attempt < maxAttempts) {
+            const backoff = 500 * Math.pow(2, attempt - 1);
+            await sleep(backoff);
+            continue;
+          }
+          // otherwise rethrow
+          throw err;
+        }
+      }
+    } catch (err) {
+      console.error('Image upload failed', err);
+      setUploadError(err?.message || 'Upload failed');
+      toast({ title: 'Error', description: 'Failed to upload image. Please try again.', variant: 'destructive' });
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -67,6 +183,37 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onClose }) 
         </DialogHeader>
         
         <div className="space-y-4">
+          <div>
+            <Label>Profile Image</Label>
+            <div className="flex items-center gap-3">
+              <div className="w-20 h-20 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+                {imagePreview ? (
+                  <img src={imagePreview} alt="preview" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-xs text-muted-foreground">No image</div>
+                )}
+              </div>
+              <div className="flex-1">
+                <Input
+                  placeholder="Image URL"
+                  value={formData.profileImage}
+                  onChange={(e) => { setFormData(prev => ({ ...prev, profileImage: e.target.value })); setImagePreview(e.target.value || null); }}
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  aria-label="Upload profile image"
+                  onChange={(e) => handleImageFile(e.target.files?.[0])}
+                  className="mt-2"
+                />
+                {uploadProgress !== null && (
+                  <div className="w-full bg-muted/30 rounded h-2 mt-2">
+                    <div className={`h-2 bg-primary rounded w-[${uploadProgress}%]`} />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
           <div>
             <Label htmlFor="name">Name</Label>
             <Input
@@ -144,8 +291,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onClose }) 
             <Button variant="outline" onClick={onClose} className="flex-1">
               Cancel
             </Button>
-            <Button onClick={handleSave} className="flex-1 bg-gradient-primary">
-              Save Changes
+            <Button onClick={handleSave} className="flex-1 bg-gradient-primary" disabled={uploading || saving}>
+              {uploading ? `Uploading... ${uploadProgress ?? ''}%` : saving ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
         </div>

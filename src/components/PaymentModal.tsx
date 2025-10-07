@@ -52,8 +52,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
   ];
 
   const videoPackages: CreditPackage[] = [
-    { credits: 1, price: 500, description: '30 minutes session' },
-    { credits: 3, price: 1200, description: '30 minutes each', savings: 'Save 20%' }
+    { credits: 1, price: 500, description: '1 hour session' },
+    { credits: 3, price: 1200, description: '1 hour each', savings: 'Save 20%' }
   ];
 
   const packages = type === 'message' ? messagePackages : videoPackages;

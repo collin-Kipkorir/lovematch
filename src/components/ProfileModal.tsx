@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { Profile } from '@/data/dummyProfiles';
+import { Profile as RealProfile } from '@/hooks/useProfiles';
+import { Profile as DummyProfile } from '@/data/dummyProfiles';
+
+type Profile = RealProfile | DummyProfile;
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';

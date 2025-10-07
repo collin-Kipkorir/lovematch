@@ -1,9 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { database } from '@/lib/firebase';
+import { ref, set, get, push, query, orderByChild, equalTo, onValue, update } from 'firebase/database';
+import { generateEncryptionKey, exportPublicKey, exportPrivateKey, importPrivateKey } from '../lib/encryption';
 
 export interface User {
   id: string;
   name: string;
   email: string;
+  password?: string;
+  profileImage: string;
   gender: 'Male' | 'Female' | 'Other';
   lookingFor: 'Male' | 'Female' | 'All';
   age: number;
@@ -12,6 +17,10 @@ export interface User {
   interests: string[];
   credits: number;
   videoCredits: number;
+  isActive: boolean;
+  lastActive: string;
+  publicKey?: string;
+  privateKey?: CryptoKey;
 }
 
 export interface ChatConversation {
@@ -29,19 +38,27 @@ interface AuthContextType {
   user: User | null;
   likedProfiles: string[];
   chatConversations: ChatConversation[];
-  login: (email: string, password: string) => boolean;
-  register: (userData: Omit<User, 'id' | 'credits' | 'videoCredits'>) => void;
-  logout: () => void;
-  updateCredits: (amount: number) => void;
-  updateVideoCredits: (amount: number) => void;
-  updateUser: (userData: User) => void;
-  toggleLikeProfile: (profileId: string) => void;
+  loginWithEmailAndPhone: (email: string, password: string) => Promise<boolean>;
+  register: (userData: Omit<User, 'id' | 'credits' | 'videoCredits' | 'isActive' | 'lastActive'> & { password: string }) => Promise<boolean>;
+  logout: () => Promise<void>;
+  updateCredits: (amount: number) => Promise<void>;
+  updateVideoCredits: (amount: number) => Promise<void>;
+  updateUser: (userData: Partial<User>) => Promise<void>;
+  toggleLikeProfile: (profileId: string) => Promise<void>;
   addChatConversation: (profile: any) => void;
   updateChatConversation: (profileId: string, lastMessage: string) => void;
-  deleteChatConversation: (profileId: string) => void; // Added delete chat functionality
+  deleteChatConversation: (profileId: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper function to hash password using Web Crypto API
+const hashPassword = async (password: string): Promise<string> => {
+  const msgBuffer = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -52,156 +69,451 @@ export const useAuth = () => {
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [likedProfiles, setLikedProfiles] = useState<string[]>([]);
+  const [user, setUser] = useState<User | null>(() => {
+    const storedUser = localStorage.getItem('user');
+    return storedUser ? JSON.parse(storedUser) : null;
+  });
+  const [likedProfiles, setLikedProfiles] = useState<string[]>(() => {
+    const storedLikes = localStorage.getItem('userLikes');
+    return storedLikes ? JSON.parse(storedLikes) : [];
+  });
   const [chatConversations, setChatConversations] = useState<ChatConversation[]>([]);
 
+  // Sync liked profiles with local storage
   useEffect(() => {
-    const savedUser = localStorage.getItem('matchmaking_user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
+    if (likedProfiles.length > 0 || localStorage.getItem('userLikes')) {
+      localStorage.setItem('userLikes', JSON.stringify(likedProfiles));
     }
-    
-    const savedLikes = localStorage.getItem('matchmaking_liked_profiles');
-    if (savedLikes) {
-      setLikedProfiles(JSON.parse(savedLikes));
+  }, [likedProfiles]);
+
+  // Set up real-time listeners when user logs in
+  useEffect(() => {
+    if (!user) {
+      setLikedProfiles([]);
+      localStorage.removeItem('userLikes');
+      return;
     }
 
-    const savedChats = localStorage.getItem('matchmaking_chat_conversations');
-    if (savedChats) {
-      setChatConversations(JSON.parse(savedChats));
-    }
-  }, []);
+    // Listen for user credit updates
+    const userRef = ref(database, `users/${user.id}`);
+    const unsubscribeUser = onValue(userRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const userData = snapshot.val();
+        // Don't update lastActive or isActive from the listener to avoid loops
+        const { password, lastActive, isActive, ...updatableFields } = userData;
+        setUser(prev => ({ 
+          ...prev!, 
+          ...updatableFields,
+          // Preserve these from previous state to avoid loops
+          lastActive: prev?.lastActive || lastActive,
+          isActive: prev?.isActive || isActive
+        }));
+      }
+    });
 
-  const login = (email: string, password: string): boolean => {
-    // Dummy login - in real app, this would call an API
-    const isAdmin = email === 'admin@lovematch.com';
-    const dummyUser: User = {
-      id: isAdmin ? 'admin' : '1',
-      name: isAdmin ? 'Admin User' : 'Demo User',
-      email,
-      gender: 'Male',
-      lookingFor: 'Female',
-      age: 28,
-      location: isAdmin ? 'Admin Panel' : 'Demo City',
-      bio: isAdmin ? 'Platform Administrator' : 'Demo user for testing',
-      interests: isAdmin ? ['admin', 'management'] : ['demo'],
-      credits: isAdmin ? 999999 : 5,
-      videoCredits: isAdmin ? 999999 : 0
+    // Listen for liked profiles
+    // Initial load of likes from Firebase
+    const loadLikesFromFirebase = async () => {
+      const likesRef = ref(database, `userLikes/${user.id}`);
+      const snapshot = await get(likesRef);
+      if (snapshot.exists()) {
+        const likes = snapshot.val();
+        const likedIds = Object.keys(likes);
+        setLikedProfiles(prev => {
+          const merged = Array.from(new Set([...prev, ...likedIds]));
+          localStorage.setItem('userLikes', JSON.stringify(merged));
+          return merged;
+        });
+      }
     };
-    
-    setUser(dummyUser);
-    localStorage.setItem('matchmaking_user', JSON.stringify(dummyUser));
-    return true;
-  };
+    loadLikesFromFirebase();
 
-  const register = (userData: Omit<User, 'id' | 'credits' | 'videoCredits'>) => {
-    const newUser: User = {
-      ...userData,
-      id: Date.now().toString(),
-      credits: 5,
-      videoCredits: 0
+    // Listen for chat conversations
+    const chatsRef = ref(database, `userChats/${user.id}`);
+    const unsubscribeChats = onValue(chatsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const chats = Object.values(snapshot.val()) as ChatConversation[];
+        setChatConversations(chats.sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        ));
+      } else {
+        setChatConversations([]);
+      }
+    });
+
+    return () => {
+      if (unsubscribeUser) unsubscribeUser();
+      if (unsubscribeChats) unsubscribeChats();
     };
-    
-    setUser(newUser);
-    localStorage.setItem('matchmaking_user', JSON.stringify(newUser));
-  };
+  }, [user]);
 
-  const logout = () => {
-    setUser(null);
-    setLikedProfiles([]);
-    setChatConversations([]);
-    localStorage.removeItem('matchmaking_user');
-    localStorage.removeItem('matchmaking_liked_profiles');
-    localStorage.removeItem('matchmaking_chat_conversations');
-  };
+  // Separate effect for handling online/offline status
+  useEffect(() => {
+    if (!user) return;
 
-  const updateCredits = (amount: number) => {
-    if (user) {
-      // Admin always has unlimited credits
-      const newCredits = user.id === 'admin' ? 999999 : Math.max(0, user.credits + amount);
-      const updatedUser = { ...user, credits: newCredits };
-      setUser(updatedUser);
-      localStorage.setItem('matchmaking_user', JSON.stringify(updatedUser));
+    const userRef = ref(database, `users/${user.id}`);
+    const userStatusRef = ref(database, `.info/connected`);
+
+    // Update user's active status
+    const updateActiveStatus = async () => {
+      await update(userRef, {
+        isActive: true,
+        lastActive: new Date().toISOString()
+      });
+    };
+    updateActiveStatus();
+
+    // Set up inactive status on disconnect
+    const unsubscribeStatus = onValue(userStatusRef, async (snapshot) => {
+      if (snapshot.val() === false) {
+        return;
+      }
+
+      await update(userRef, {
+        isActive: false,
+        lastActive: new Date().toISOString()
+      });
+    });
+
+    return () => {
+      unsubscribeStatus();
+    };
+  }, [user?.id]);
+
+  const loginWithEmailAndPhone = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const usersRef = ref(database, 'users');
+      const emailQuery = query(usersRef, orderByChild('email'), equalTo(email));
+      const snapshot = await get(emailQuery);
+      
+      if (!snapshot.exists()) {
+        throw new Error('User not found');
+      }
+
+      const users = snapshot.val();
+      const userId = Object.keys(users)[0];
+      const userData = users[userId];
+      
+      // Verify password
+      if (!userData.password || userData.password !== password) {
+        throw new Error('Invalid password');
+      }
+
+      const { password: _, ...userWithoutPassword } = userData;
+      
+      try {
+        // Update last login time
+        await update(ref(database, `users/${userId}`), {
+          lastActive: new Date().toISOString(),
+          isActive: true
+        });
+      } catch (updateError) {
+        console.error('Failed to update last login time:', updateError);
+        // Continue with login even if updating last login time fails
+      }
+      
+      // Get private key from localStorage or generate new keys if needed
+      let privateKeyString = localStorage.getItem(`privateKey_${userId}`);
+      let privateKey: CryptoKey | undefined;
+      
+      if (!privateKeyString || !userWithoutPassword.publicKey) {
+        // Generate new key pair if we don't have keys
+        const keyPair = await generateEncryptionKey();
+        const publicKeyString = await exportPublicKey(keyPair.publicKey);
+        privateKeyString = await exportPrivateKey(keyPair.privateKey);
+        
+        // Update public key in Firebase
+        await update(ref(database, `users/${userId}`), {
+          publicKey: publicKeyString
+        });
+        
+        // Store new private key
+        localStorage.setItem(`privateKey_${userId}`, privateKeyString);
+        privateKey = keyPair.privateKey;
+      } else {
+        // Import existing private key
+        try {
+          privateKey = await importPrivateKey(privateKeyString);
+        } catch (error) {
+          console.error('Error importing private key:', error);
+          // Generate new key pair if import fails
+          const keyPair = await generateEncryptionKey();
+          const publicKeyString = await exportPublicKey(keyPair.publicKey);
+          privateKeyString = await exportPrivateKey(keyPair.privateKey);
+          
+          await update(ref(database, `users/${userId}`), {
+            publicKey: publicKeyString
+          });
+          
+          localStorage.setItem(`privateKey_${userId}`, privateKeyString);
+          privateKey = keyPair.privateKey;
+        }
+      }
+
+      // Store session in localStorage
+      localStorage.setItem('user', JSON.stringify({
+        ...userWithoutPassword,
+        id: userId
+      }));
+      
+      setUser({
+        ...userWithoutPassword,
+        id: userId,
+        privateKey // Include the CryptoKey object in memory
+      });
+      return true;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
     }
   };
 
-  const updateVideoCredits = (amount: number) => {
-    if (user) {
-      // Admin always has unlimited video credits
-      const newVideoCredits = user.id === 'admin' ? 999999 : Math.max(0, user.videoCredits + amount);
-      const updatedUser = { ...user, videoCredits: newVideoCredits };
-      setUser(updatedUser);
-      localStorage.setItem('matchmaking_user', JSON.stringify(updatedUser));
+  const register = async (userData: Omit<User, 'id' | 'credits' | 'videoCredits' | 'isActive' | 'lastActive' | 'publicKey' | 'privateKey'> & { password: string }) => {
+    try {
+      // Check if email already exists
+      const usersRef = ref(database, 'users');
+      const emailQuery = query(usersRef, orderByChild('email'), equalTo(userData.email));
+      const emailSnapshot = await get(emailQuery);
+      
+      if (emailSnapshot.exists()) {
+        throw new Error('Email already exists');
+      }
+      
+      // Generate a unique ID for the user and encryption keys
+      const newUserRef = push(ref(database, 'users'));
+      const { password, ...userDataWithoutPassword } = userData;
+      
+      // Generate encryption keys
+      const keyPair = await generateEncryptionKey();
+      const publicKeyString = await exportPublicKey(keyPair.publicKey);
+      
+      const newUser: User = {
+        ...userDataWithoutPassword,
+        id: newUserRef.key!,
+        credits: 5, // Initial free credits
+        videoCredits: 0,
+        isActive: true,
+        lastActive: new Date().toISOString(),
+        publicKey: publicKeyString,
+        privateKey: keyPair.privateKey
+      };
+      
+      // Store user data in Firebase (without private key)
+      const { privateKey, ...userDataForFirebase } = newUser;
+      const userDataToStore = {
+        ...userDataForFirebase,
+        password // Store password in database (in real app, should be hashed)
+      };
+      
+      await set(newUserRef, userDataToStore);
+      
+      // Store session in localStorage (including privateKey)
+      const userDataForLocal = {
+        ...newUser,
+        privateKey: null // CryptoKey can't be stringified, store it separately
+      };
+      localStorage.setItem('user', JSON.stringify(userDataForLocal));
+      localStorage.setItem(`privateKey_${newUser.id}`, keyPair.privateKey.toString());
+      
+      // Set user in context without password
+      setUser(newUser);
+      return true;
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
     }
   };
 
-  const updateUser = (userData: User) => {
-    setUser(userData);
-    localStorage.setItem('matchmaking_user', JSON.stringify(userData));
+  const logout = async () => {
+    if (!user) return;
+
+    try {
+      // Update last active status
+      await update(ref(database, `users/${user.id}`), {
+        isActive: false,
+        lastActive: new Date().toISOString()
+      });
+
+      // Clear local storage
+      localStorage.removeItem('user');
+
+      setUser(null);
+      setLikedProfiles([]);
+      setChatConversations([]);
+    } catch (error) {
+      console.error('Logout error:', error);
+      throw error;
+    }
   };
 
-  const toggleLikeProfile = (profileId: string) => {
-    const updatedLikes = likedProfiles.includes(profileId)
-      ? likedProfiles.filter(id => id !== profileId)
-      : [...likedProfiles, profileId];
-    
-    setLikedProfiles(updatedLikes);
-    localStorage.setItem('matchmaking_liked_profiles', JSON.stringify(updatedLikes));
+  const updateCredits = async (amount: number) => {
+    if (!user) return;
+
+    try {
+      const userRef = ref(database, `users/${user.id}`);
+      const snapshot = await get(userRef);
+      
+      if (snapshot.exists()) {
+        const currentCredits = snapshot.val().credits || 0;
+        const newCredits = Math.max(0, currentCredits + amount);
+        
+        await update(userRef, { credits: newCredits });
+
+        // Also log the transaction
+        const transactionRef = push(ref(database, 'creditTransactions'));
+        await set(transactionRef, {
+          userId: user.id,
+          amount,
+          type: amount > 0 ? 'credit' : 'debit',
+          timestamp: new Date().toISOString(),
+          balance: newCredits
+        });
+      }
+    } catch (error) {
+      console.error('Error updating credits:', error);
+      throw error;
+    }
   };
 
-  const addChatConversation = (profile: any) => {
-    const existingChat = chatConversations.find(chat => chat.profileId === profile.id);
-    if (existingChat) return; // Chat already exists
+  const updateVideoCredits = async (amount: number) => {
+    if (!user) return;
 
-    const newChat: ChatConversation = {
-      id: `chat_${profile.id}`,
-      profileId: profile.id,
-      name: profile.name,
-      avatar: profile.avatar,
-      profilePicture: profile.profilePicture,
-      lastMessage: "Chat started",
-      timestamp: "now",
-      unread: 0
-    };
+    try {
+      const userRef = ref(database, `users/${user.id}`);
+      const snapshot = await get(userRef);
+      
+      if (snapshot.exists()) {
+        const currentCredits = snapshot.val().videoCredits || 0;
+        const newCredits = Math.max(0, currentCredits + amount);
+        
+        await update(userRef, { videoCredits: newCredits });
 
-    const updatedChats = [...chatConversations, newChat];
-    setChatConversations(updatedChats);
-    localStorage.setItem('matchmaking_chat_conversations', JSON.stringify(updatedChats));
+        // Log the transaction
+        const transactionRef = push(ref(database, 'videoCreditsTransactions'));
+        await set(transactionRef, {
+          userId: user.id,
+          amount,
+          type: amount > 0 ? 'credit' : 'debit',
+          timestamp: new Date().toISOString(),
+          balance: newCredits
+        });
+      }
+    } catch (error) {
+      console.error('Error updating video credits:', error);
+      throw error;
+    }
   };
 
-  const updateChatConversation = (profileId: string, lastMessage: string) => {
-    const updatedChats = chatConversations.map(chat => 
-      chat.profileId === profileId 
-        ? { ...chat, lastMessage, timestamp: "now", unread: chat.unread + 1 }
-        : chat
-    );
-    setChatConversations(updatedChats);
-    localStorage.setItem('matchmaking_chat_conversations', JSON.stringify(updatedChats));
+  const updateUser = async (userData: Partial<User>) => {
+    if (!user) return;
+
+    try {
+      await update(ref(database, `users/${user.id}`), userData);
+      // Optimistically update local user state so UI reflects changes immediately
+      setUser(prev => {
+        if (!prev) return prev;
+        const updated = { ...prev, ...userData } as User;
+        try {
+          // Store a serializable copy in localStorage (remove non-serializable fields)
+          const toStore: any = { ...updated };
+          if (toStore.privateKey) delete toStore.privateKey;
+          localStorage.setItem('user', JSON.stringify(toStore));
+        } catch (e) {
+          // ignore localStorage errors
+        }
+        return updated;
+      });
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
   };
 
-  /**
-   * DELETE CHAT CONVERSATION - Backend Integration Guide
-   * TODO: Replace with API call to backend
-   * 
-   * API Endpoint: DELETE /api/conversations/{conversationId}
-   * - Soft delete conversation (set is_deleted = true)
-   * - Remove all messages for user (keep for admin audit trail)
-   * - Update user's conversation list
-   * - Send real-time notification to other participant
-   * 
-   * Security considerations:
-   * - Verify user owns this conversation
-   * - Rate limit deletion requests
-   * - Log deletion for audit purposes
-   */
-  const deleteChatConversation = (profileId: string) => {
-    const updatedChats = chatConversations.filter(chat => chat.profileId !== profileId);
-    setChatConversations(updatedChats);
-    localStorage.setItem('matchmaking_chat_conversations', JSON.stringify(updatedChats));
-    
-    // TODO: Also remove individual chat messages from localStorage
-    localStorage.removeItem(`chat_${profileId}`);
+  const toggleLikeProfile = async (profileId: string) => {
+    if (!user) return;
+
+    try {
+      // Update local state first for instant feedback
+      const isCurrentlyLiked = likedProfiles.includes(profileId);
+      if (isCurrentlyLiked) {
+        // Unlike
+        setLikedProfiles(prev => prev.filter(id => id !== profileId));
+      } else {
+        // Like
+        setLikedProfiles(prev => [...prev, profileId]);
+      }
+
+      // Then sync with Firebase
+      const likeRef = ref(database, `userLikes/${user.id}/${profileId}`);
+      if (isCurrentlyLiked) {
+        await set(likeRef, null);
+      } else {
+        await set(likeRef, {
+          timestamp: new Date().toISOString()
+        });
+
+        // Check for mutual like
+        const mutualLikeRef = ref(database, `userLikes/${profileId}/${user.id}`);
+        const mutualSnapshot = await get(mutualLikeRef);
+        
+        if (mutualSnapshot.exists()) {
+          // Create a match
+          const matchId = [user.id, profileId].sort().join('_');
+          await set(ref(database, `matches/${matchId}`), {
+            users: [user.id, profileId],
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling like:', error);
+      throw error;
+    }
+  };
+
+  const addChatConversation = async (profile: Omit<User, 'password'>) => {
+    if (!user) return;
+
+    try {
+      const chatId = [user.id, profile.id].sort().join('_');
+      await set(ref(database, `userChats/${user.id}/${chatId}`), {
+        id: chatId,
+        profileId: profile.id,
+        name: profile.name,
+        avatar: profile.profileImage,
+        lastMessage: '',
+        timestamp: new Date().toISOString(),
+        unread: 0
+      });
+    } catch (error) {
+      console.error('Error adding chat:', error);
+    }
+  };
+
+  const updateChatConversation = async (profileId: string, lastMessage: string) => {
+    if (!user) return;
+
+    try {
+      const chatId = [user.id, profileId].sort().join('_');
+      await update(ref(database, `userChats/${user.id}/${chatId}`), {
+        lastMessage,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error updating chat:', error);
+    }
+  };
+
+  const deleteChatConversation = async (profileId: string) => {
+    if (!user) return;
+
+    try {
+      const chatId = [user.id, profileId].sort().join('_');
+      await set(ref(database, `userChats/${user.id}/${chatId}`), null);
+      setChatConversations(prev => prev.filter(chat => chat.profileId !== profileId));
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+    }
   };
 
   return (
@@ -209,7 +521,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user, 
       likedProfiles, 
       chatConversations, 
-      login, 
+      loginWithEmailAndPhone, 
       register, 
       logout, 
       updateCredits, 

@@ -82,7 +82,7 @@ const Profile: React.FC = () => {
                 <div className="relative group">
                   <div className="absolute -inset-1 bg-gradient-to-r from-primary to-primary/70 rounded-full opacity-75 group-hover:opacity-100 transition duration-300 blur-sm"></div>
                   <img
-                    src="/placeholder.svg"
+                    src={user.profileImage || user.images?.[0] || '/placeholder.svg'}
                     alt={user.name}
                     className="relative w-28 h-28 rounded-full object-cover border-4 border-background shadow-xl"
                   />
@@ -211,13 +211,7 @@ const Profile: React.FC = () => {
 
           {/* Actions */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Button 
-              variant="outline" 
-              className="h-12 bg-background/50 hover:bg-background border-border/50 hover:border-primary/30 transition-all duration-200"
-            >
-              <Settings className="h-5 w-5 mr-2" />
-              Settings
-            </Button>
+            
             <Button 
               variant="outline" 
               className="h-12 bg-primary/5 hover:bg-primary/10 border-primary/20 hover:border-primary/40 text-primary hover:text-primary transition-all duration-200"
