@@ -56,16 +56,13 @@ const ChatList = () => {
 
   if (sortedChats.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-[70vh] text-center p-4">
+      <div className="flex flex-col items-center justify-center h-[70vh] text-center">
         <MessageCircle className="h-12 w-12 text-gray-400 mb-4" />
         <h3 className="text-lg font-semibold mb-2">No Conversations Yet</h3>
         <p className="text-sm text-gray-500 mb-4">
           Start chatting with your matches to find your soulmate!
         </p>
-        {/* Debug output for troubleshooting */}
-        <pre className="text-xs text-left bg-gray-100 rounded p-2 mt-4 w-full max-w-xl overflow-x-auto">
-          {JSON.stringify(chats, null, 2)}
-        </pre>
+        
       </div>
     );
   }
@@ -133,7 +130,7 @@ const ChatList = () => {
                   <Button
                     variant="ghost"
                     className={cn(
-                      "w-full py-8 px-1 mb-2 flex items-center rounded-lg border border-gray-200 shadow-sm transition-all bg-gray-900 hover:bg-gray-800 focus:bg-gray-800",
+                      "w-full py-8 mb-2 flex items-center rounded-lg border border-gray-200 shadow-sm transition-all bg-gray-900 hover:bg-gray-800 focus:bg-gray-800",
                       unreadCount > 0 && !isLastMessageFromMe ? "bg-accent/20 border-accent/40" : ""
                     )}
                     onClick={() => {
