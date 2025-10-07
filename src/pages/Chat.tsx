@@ -132,7 +132,7 @@ const Chat: React.FC<ChatProps> = ({ deleteChatConversation }) => {
 
       toast({
         title: "Image Sent",
-        description: "1 credit deducted from your balance.",
+      
         variant: "default"
       });
 
@@ -261,7 +261,7 @@ const Chat: React.FC<ChatProps> = ({ deleteChatConversation }) => {
 
       toast({
         title: "Message Sent",
-        description: "1 credit deducted from your balance.",
+      
         variant: "default"
       });
 

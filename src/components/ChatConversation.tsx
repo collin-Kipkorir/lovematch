@@ -225,7 +225,7 @@ const ChatConversationInner: React.FC<ChatConversationProps> = ({ otherUserId: p
 
       toast({
         title: "Message Sent",
-        description: "1 credit deducted from your balance.",
+      
         variant: "default"
       });
 
@@ -292,7 +292,7 @@ const ChatConversationInner: React.FC<ChatConversationProps> = ({ otherUserId: p
 
       toast({
         title: "Image Sent",
-        description: "1 credit deducted from your balance.",
+      
         variant: "default"
       });
     } catch (error) {

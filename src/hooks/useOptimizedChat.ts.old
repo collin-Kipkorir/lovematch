@@ -1,0 +1,276 @@
+import { useEffect, useState, useCallback } from 'react';
+import { ref, onValue, set, push, update, get } from 'firebase/database';
+import { database } from '../lib/firebase';
+import { useAuth } from '../context/AuthContext';
+import { Chat, ChatMessage, RawMessageData } from '../types/chat';
+import { localCache } from '../lib/localCache';
+import { encryptMessage, decryptMessage, importPublicKey } from '../lib/encryption'; { useEffect, useState, useCallback } from 'react';
+import { ref, onValue, set, push, update, get } from 'firebase/database';
+import { database } from '../lib/firebase';
+import { useAuth } from '../context/AuthContext';
+import { Chat, ChatMessage, RawMessageData } from '../types/chat';
+import { localCache } from '../lib/localCache';
+import { encryptMessage, decryptMessage, importPublicKey } from '../lib/encryption'; { useEffect, useState, useCallback } from 'react';
+import { ref, onValue, set, push, update, get } from 'firebase/database';
+import { database } from '../lib/firebase';
+import { useAuth } from '../context/AuthContext';
+import { Chat, ChatMessage, RawMessageData } from '../types/chat';
+import { localCache } from '../lib/localCache';
+import { encryptMessage, decryptMessage, importPublicKey } from '../lib/encryption';
+import { encryptMessage, decryptMessage, importPublicKey } from '../lib/encryption';
+
+interface RawMessageData {
+  id?: string;
+  senderId: string;
+  receiverId: string;
+  content?: string;
+  message?: string;
+  encryptedContent?: string;
+  timestamp: number;
+  read?: boolean;
+}
+
+// Queue for background operations
+const syncQueue: (() => Promise<void>)[] = [];
+let isSyncing = false;
+
+// Process queue in background
+const processSyncQueue = async () => {
+  if (isSyncing || syncQueue.length === 0) return;
+  
+  isSyncing = true;
+  try {
+    while (syncQueue.length > 0) {
+      const operation = syncQueue.shift();
+      if (operation) {
+        await operation();
+      }
+    }
+  } finally {
+    isSyncing = false;
+  }
+};
+
+export const useOptimizedChat = (otherUserId?: string) => {
+  const { user } = useAuth();
+  const [chats, setChats] = useState<Record<string, Chat>>({});
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Initialize from cache and sync with Firebase
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Load from cache first
+    const cachedChats = localCache.chats.getAll();
+    if (cachedChats) {
+      setChats(cachedChats);
+      setLoading(false);
+    }
+
+    // Then sync with Firebase
+    const chatsRef = ref(database, 'chats');
+    const unsubscribe = onValue(chatsRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        const firebaseChats = snapshot.val();
+        
+        // Update cache and state
+        localCache.chats.set(firebaseChats);
+        setChats(firebaseChats);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Load messages for specific chat
+  useEffect(() => {
+    if (!user?.id || !otherUserId) return;
+
+    const chatId = [user.id, otherUserId].sort().join('_');
+    
+    // Load from cache first
+    const cachedMessages = localCache.messages.get(chatId);
+    if (cachedMessages) {
+      setMessages(cachedMessages);
+      setLoading(false);
+    }
+
+    // Then sync with Firebase
+    const messagesRef = ref(database, `chats/${chatId}/messages`);
+    const unsubscribe = onValue(messagesRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const messagesList = Object.entries(snapshot.val() as Record<string, RawMessageData>).map(([key, msg]) => ({
+          id: key,
+          senderId: msg.senderId,
+          receiverId: msg.receiverId,
+          text: await decryptMessage(msg.encryptedContent, user.privateKey) || msg.text || '// Message cannot be decrypted',
+          timestamp: msg.timestamp,
+          read: msg.read || false
+        }));
+        messagesList.sort((a, b) => a.timestamp - b.timestamp);
+        
+        // Update cache and state
+        localCache.messages.set(chatId, messagesList);
+        setMessages(messagesList);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user, otherUserId]);
+
+  const startChat = useCallback(async (targetUserId: string) => {
+    if (!user?.id) return null;
+
+    const chatId = [user.id, targetUserId].sort().join('_');
+    
+    // Check cache first
+    const cachedChats = localCache.chats.getAll();
+    if (cachedChats?.[chatId]) {
+      return chatId;
+    }
+
+    // Initialize chat locally
+    const newChat: Chat = {
+      id: chatId,
+      metadata: {
+        participants: [user.id, targetUserId],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      },
+      participants: [],
+      unreadCount: {
+        [user.id]: 0,
+        [targetUserId]: 0
+      }
+    };
+
+    // Update cache and state immediately
+    localCache.chats.update(chatId, newChat);
+    setChats(prev => ({ ...prev, [chatId]: newChat }));
+
+    // Queue Firebase sync
+    syncQueue.push(async () => {
+      const chatRef = ref(database, `chats/${chatId}`);
+      await set(chatRef, newChat);
+    });
+    processSyncQueue();
+
+    return chatId;
+  }, [user]);
+
+  const sendMessage = useCallback(async (content: string) => {
+    if (!user?.id || !otherUserId) return;
+
+    const chatId = [user.id, otherUserId].sort().join('_');
+    const messageRef = push(ref(database, `chats/${chatId}/messages`));
+
+    try {
+      // Get recipient's public key
+      const otherUserData = await get(ref(database, `users/${otherUserId}`));
+      if (!otherUserData.exists()) {
+        throw new Error('Recipient user data not found');
+      }
+      
+      const otherUserPublicKey = await importPublicKey(otherUserData.val().publicKey);
+      const encryptedContent = await encryptMessage(content, otherUserPublicKey);
+      
+      // Create and save encrypted message
+      const newMessage: RawMessageData = {
+        id: messageRef.key || undefined,
+        senderId: user.id,
+        receiverId: otherUserId,
+        encryptedContent,
+        timestamp: Date.now(),
+        read: false
+      };
+
+    // Update local cache and state immediately
+    localCache.messages.update(chatId, newMessage);
+    setMessages(prev => [...prev, newMessage]);
+
+    // Queue Firebase sync
+    syncQueue.push(async () => {
+      const chatRef = ref(database, `chats/${chatId}`);
+      const messageRef = push(ref(database, `chats/${chatId}/messages`));
+      
+      // Get recipient's public key
+      const otherUserData = await get(ref(database, `users/${otherUserId}`));
+      const otherUserPublicKey = await importPublicKey(otherUserData.val().publicKey);
+      
+      // Encrypt the message
+      const encryptedContent = await encryptMessage(content, otherUserPublicKey);
+      
+      await set(messageRef, {
+        id: messageRef.key,
+        senderId: user.id,
+        receiverId: otherUserId,
+        encryptedContent,
+        timestamp: Date.now(),
+        read: false
+      });
+
+      await update(chatRef, {
+        'metadata/lastMessage': {
+          content: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+          timestamp: Date.now(),
+          senderId: user.id
+        },
+        'metadata/updatedAt': Date.now(),
+        [`unreadCount/${otherUserId}`]: (chats[chatId]?.unreadCount[otherUserId] || 0) + 1
+      });
+    });
+    processSyncQueue();
+  }, [user, otherUserId, chats]);
+
+  return {
+    chats,
+    messages,
+    loading,
+    startChat,
+    sendMessage
+  };
+};
+
+// Helper hook for chat list
+export const useChatList = () => {
+  const { user } = useAuth();
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Load from cache first
+    const cachedChats = localCache.chats.getAll();
+    if (cachedChats) {
+      const chatList = Object.values(cachedChats)
+        .filter(chat => chat.metadata.participants.includes(user.id))
+        .sort((a, b) => (b.metadata.updatedAt || 0) - (a.metadata.updatedAt || 0));
+      
+      setChats(chatList);
+      setLoading(false);
+    }
+
+    // Then sync with Firebase
+    const chatsRef = ref(database, 'chats');
+    const unsubscribe = onValue(chatsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const firebaseChats = snapshot.val();
+        const chatList = Object.values(firebaseChats as Record<string, Chat>)
+          .filter(chat => chat.metadata.participants.includes(user.id))
+          .sort((a, b) => (b.metadata.updatedAt || 0) - (a.metadata.updatedAt || 0));
+
+        localCache.chats.set(firebaseChats);
+        setChats(chatList);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  return { chats, loading };
+};

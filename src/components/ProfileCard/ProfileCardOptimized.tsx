@@ -6,15 +6,13 @@ import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import PaymentModal from '@/components/PaymentModal';
-
-import ChatModal from '@/components/ChatModal';
 import { cn } from '@/lib/utils';
 import { database } from '@/lib/firebase';
 import { ref, get, set, update } from 'firebase/database';
 
 interface ProfileCardProps {
   profile: Profile;
-  onClick?: () => void;
+  onClick: () => void;
 }
 
 const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
@@ -24,7 +22,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const debouncedActionRef = useRef<NodeJS.Timeout>();
-  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
   
   const isLiked = likedProfiles.includes(profile.id);
   const distanceText = profile.location ? profile.location : 'Location not set';
@@ -46,53 +43,41 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
     return date.toLocaleDateString();
   }, []);
 
-  const debounce = useCallback((callback: () => Promise<void>) => {
+  const debounce = useCallback((callback: () => Promise<void>, delay: number) => {
     if (debouncedActionRef.current) {
       clearTimeout(debouncedActionRef.current);
     }
     if (isLoading) return;
-
     debouncedActionRef.current = setTimeout(async () => {
-      setIsLoading(true);
       try {
+        setIsLoading(true);
         await callback();
       } finally {
         setIsLoading(false);
       }
-    }, 300);
+    }, delay);
   }, [isLoading]);
 
-  const handleLike = (e: React.MouseEvent) => {
+  const handleLike = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) {
       navigate('/login');
       return;
     }
 
-    // Update localStorage instantly
-    const localKey = `favorites_${user.id}`;
-    let localFavs: string[] = [];
-    try {
-      localFavs = JSON.parse(localStorage.getItem(localKey) || '[]');
-    } catch { localFavs = []; }
-
-    let updatedFavs: string[];
-    if (isLiked) {
-      updatedFavs = localFavs.filter(id => id !== profile.id);
-    } else {
-      updatedFavs = [...localFavs, profile.id];
-    }
-    localStorage.setItem(localKey, JSON.stringify(updatedFavs));
-
-    // Update UI state immediately
-    toggleLikeProfile(profile.id);
-
-    // Sync with Firebase in background
     debounce(async () => {
       try {
         const favoritesRef = ref(database, `userFavorites/${user.id}/${profile.id}`);
+        
         if (isLiked) {
           await set(favoritesRef, null);
+          await toggleLikeProfile(profile.id);
+          
+          toast({
+            title: 'Removed from Favorites',
+            description: `${profile.name}'s profile has been removed from your favorites`,
+            variant: "default"
+          });
         } else {
           await set(favoritesRef, {
             id: profile.id,
@@ -102,19 +87,19 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
             location: profile.location,
             addedAt: new Date().toISOString()
           });
+          await toggleLikeProfile(profile.id);
+          
+          toast({
+            title: 'Added to Favorites',
+            description: `${profile.name}'s profile has been added to your favorites`,
+            variant: "default",
+            action: (
+              <Button variant="outline" size="sm" onClick={() => navigate('/favorites')}>
+                View Favorites
+              </Button>
+            )
+          });
         }
-        toast({
-          title: isLiked ? 'Removed from Favorites' : 'Added to Favorites',
-          description: isLiked
-            ? `${profile.name}'s profile has been removed from your favorites`
-            : `${profile.name}'s profile has been added to your favorites`,
-          variant: isLiked ? 'default' : 'default',
-          action: !isLiked ? (
-            <Button variant="outline" size="sm" onClick={() => navigate('/favorites')}>
-              View Favorites
-            </Button>
-          ) : undefined
-        });
       } catch (error) {
         console.error('Error updating favorites:', error);
         toast({
@@ -123,10 +108,10 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
           variant: "destructive"
         });
       }
-    });
-  };
+    }, 300);
+  }, [user, profile, isLiked, navigate, toggleLikeProfile, toast, debounce]);
 
-  const handleMessage = (e: React.MouseEvent) => {
+  const handleMessage = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!user) {
       navigate('/login');
@@ -135,19 +120,18 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
 
     if (user.credits <= 0) {
       setIsPaymentModalOpen(true);
-      setIsChatModalOpen(false);
       return;
     }
 
-    setIsPaymentModalOpen(false);
-    // Ensure chat exists, then open modal
     debounce(async () => {
       try {
         const chatId = [user.id, profile.id].sort().join('_');
         const chatRef = ref(database, `chats/${chatId}`);
         const timestamp = new Date().toISOString();
+        
         const snapshot = await get(chatRef);
         const chatExists = snapshot.exists();
+        
         if (!chatExists) {
           await Promise.all([
             set(chatRef, {
@@ -192,7 +176,20 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
             })
           ]);
         }
-        setIsChatModalOpen(true);
+
+        navigate(`/chat/${profile.id}`, {
+          state: {
+            chatId,
+            otherUser: {
+              id: profile.id,
+              name: profile.name,
+              profileImage: profile.profileImage,
+              age: profile.age,
+              lastActive: profile.lastActive,
+              isActive: profile.isActive
+            }
+          }
+        });
       } catch (error) {
         console.error('Error creating chat:', error);
         toast({
@@ -201,41 +198,34 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
           variant: "destructive"
         });
       }
-    });
-  };
+    }, 300);
+  }, [user, profile, navigate, toast, debounce]);
 
   return (
     <>
       <div 
-        onClick={onClick} 
-        className="group relative bg-card rounded-lg overflow-hidden cursor-pointer border border-border/50 transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:-translate-y-1"
+        onClick={onClick}
+        className={cn(
+          "group relative bg-card rounded-lg overflow-hidden cursor-pointer border border-border/50 transition-all duration-300 hover:border-primary/50 hover:shadow-lg hover:-translate-y-1",
+          isLoading && "opacity-70 pointer-events-none"
+        )}
       >
         {/* Profile Image with Hover Info Overlay */}
         <div className="relative aspect-[3/4] bg-gradient-to-b from-background/20 to-background/5">
-          {(() => {
-            let imgSrc = profile.profileImage;
-            if (!imgSrc || typeof imgSrc !== 'string' || imgSrc.trim() === '' || imgSrc === 'undefined' || imgSrc === 'null') {
-              imgSrc = '/placeholder.svg';
-            }
-            if (imgSrc) {
-              return (
-                <img 
-                  src={imgSrc} 
-                  alt={profile.name} 
-                  className="w-full h-full object-cover transform transition-transform duration-500 group-hover:scale-105"
-                  loading="lazy"
-                  decoding="async"
-                  fetchPriority="high"
-                />
-              );
-            } else {
-              return (
-                <div className="w-full h-full flex items-center justify-center bg-primary/5">
-                  <span className="text-4xl">👤</span>
-                </div>
-              );
-            }
-          })()}
+          {profile.profileImage ? (
+            <img 
+              src={profile.profileImage} 
+              alt={profile.name} 
+              className="w-full h-full object-cover transform transition-transform duration-500 group-hover:scale-105"
+              loading="lazy"
+              decoding="async"
+              fetchpriority="high"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-primary/5">
+              <span className="text-4xl">👤</span>
+            </div>
+          )}
           
           {/* Hover Info Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-4">
@@ -296,7 +286,8 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
               variant="outline"
               className={cn(
                 "flex-1 hover:bg-primary/10 hover:border-primary/30 transition-colors",
-                isLiked && "bg-primary/10 border-primary text-primary"
+                isLiked && "bg-primary/10 border-primary text-primary",
+                isLoading && "opacity-50 cursor-not-allowed"
               )}
               onClick={handleLike}
               disabled={isLoading}
@@ -307,7 +298,10 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
             <Button
               size="sm"
               variant="outline"
-              className="flex-1 hover:bg-primary/10 hover:border-primary/30 transition-colors"
+              className={cn(
+                "flex-1 hover:bg-primary/10 hover:border-primary/30 transition-colors",
+                isLoading && "opacity-50 cursor-not-allowed"
+              )}
               onClick={handleMessage}
               disabled={isLoading}
             >
@@ -318,20 +312,26 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, onClick }) => {
         </div>
       </div>
 
-      {/* Only one modal open at a time */}
       <PaymentModal 
-        isOpen={isPaymentModalOpen && !isChatModalOpen} 
+        isOpen={isPaymentModalOpen} 
         onClose={() => setIsPaymentModalOpen(false)}
         type="message"
-      />
-      {/* Use the same ChatModal as chat list, always full height, dark, and with the same props */}
-      <ChatModal
-        open={isChatModalOpen && !isPaymentModalOpen}
-        onOpenChange={setIsChatModalOpen}
-        otherUserId={profile.id}
       />
     </>
   );
 };
 
-export default memo(ProfileCard);
+// Memoize the component to prevent unnecessary re-renders
+export default memo(ProfileCard, (prevProps, nextProps) => {
+  return (
+    prevProps.profile.id === nextProps.profile.id &&
+    prevProps.profile.name === nextProps.profile.name &&
+    prevProps.profile.age === nextProps.profile.age &&
+    prevProps.profile.profileImage === nextProps.profile.profileImage &&
+    prevProps.profile.isActive === nextProps.profile.isActive &&
+    prevProps.profile.lastActive === nextProps.profile.lastActive &&
+    prevProps.profile.location === nextProps.profile.location &&
+    prevProps.profile.isVerified === nextProps.profile.isVerified &&
+    prevProps.profile.bio === nextProps.profile.bio
+  );
+});

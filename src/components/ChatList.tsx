@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Avatar } from '../components/ui/avatar';
+import { Avatar, AvatarImage, AvatarFallback } from '../components/ui/avatar';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -47,7 +47,7 @@ const ChatList = () => {
               <div className="h-4 bg-gray-200 rounded w-1/4" />
               <div className="h-3 bg-gray-200 rounded w-3/4" />
             </div>
-            
+
           </div>
         ))}
       </div>
@@ -107,7 +107,10 @@ const ChatList = () => {
               const displayName = receiver?.name || 'User';
               let displayAvatar = receiver?.profileImage || receiver?.avatar;
               if (!displayAvatar || typeof displayAvatar !== 'string' || displayAvatar.trim() === '' || displayAvatar === 'undefined' || displayAvatar === 'null') {
-                displayAvatar = '/placeholder.svg';
+                displayAvatar = '';
+              } else if (!displayAvatar.startsWith('http') && !displayAvatar.startsWith('data:')) {
+                // If it's a relative path, ensure it starts with /
+                displayAvatar = displayAvatar.startsWith('/') ? displayAvatar : `/${displayAvatar}`;
               }
 
               // Always show a preview of the most recent sent or received message
@@ -141,11 +144,13 @@ const ChatList = () => {
                     <div className="flex items-center space-x-3 w-full">
                       <div className="relative flex-shrink-0">
                         <Avatar className="w-12 h-12">
-                          <img
+                          <AvatarImage
                             src={displayAvatar}
                             alt={displayName}
-                            className="w-full h-full object-cover rounded-full"
                           />
+                          <AvatarFallback>
+                            {displayName.charAt(0).toUpperCase()}
+                          </AvatarFallback>
                         </Avatar>
                       </div>
                       <div className="flex-1 min-w-0 space-y-1">
