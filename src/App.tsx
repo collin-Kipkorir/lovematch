@@ -18,6 +18,7 @@ import Profile from "./pages/Profile";
 import AdminHelp from "./pages/AdminHelp";
 import Payment from "./pages/Payment";
 import Admin from "./pages/Admin";
+import InstallPrompt from "./components/InstallPrompt";
 import AdminLogin from "./pages/AdminLogin";
 import NotFound from "./pages/NotFound";
 import ModeratorApplication from "./pages/ModeratorApplication";
@@ -32,6 +33,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <InstallPrompt />
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
