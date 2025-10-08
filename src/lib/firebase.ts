@@ -3,6 +3,7 @@ import { getDatabase, ref, onValue } from 'firebase/database';
 import { getStorage } from 'firebase/storage';
 import { getAnalytics } from 'firebase/analytics';
 import { getFirestore } from 'firebase/firestore';
+import { getMessaging, isSupported, Messaging } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCjm2rR2H57hj1kP5iXjBDXDpZhV7xAE6E",
@@ -15,11 +16,24 @@ const firebaseConfig = {
   measurementId: "G-1X0FCLF7LH"
 };
 
-// Initialize Firebase
+// Initialize Firebase and services
 const app = initializeApp(firebaseConfig);
-
-// Initialize services
+const firestore = getFirestore(app);
 const database = getDatabase(app);
+const storage = getStorage(app);
+const analytics = getAnalytics(app);
+
+// Initialize Firebase Cloud Messaging
+let messaging: Messaging | null = null;
+
+// Check if FCM is supported
+isSupported().then(isSupported => {
+  if (isSupported) {
+    messaging = getMessaging(app);
+  }
+}).catch(err => {
+  console.error('FCM support check failed:', err);
+});
 
 // Test database connection
 const connectedRef = ref(database, '.info/connected');
@@ -31,8 +45,5 @@ onValue(connectedRef, (snap) => {
   }
 });
 
-const storage = getStorage(app);
-const analytics = getAnalytics(app);
-const firestore = getFirestore(app);
-
-export { database, storage, analytics, firestore };
+// Export all Firebase services
+export { app, firestore, database, storage, analytics, messaging };

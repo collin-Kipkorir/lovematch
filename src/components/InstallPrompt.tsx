@@ -24,7 +24,7 @@ const InstallPrompt = () => {
   if (!isInstallable || !showPrompt || dismissed) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 shadow-lg border-t border-gray-200 dark:border-gray-800 z-50">
+    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 shadow-lg border-t border-gray-200 dark:border-gray-800 z-50 mb-[4.5rem] sm:mb-0">
       <div className="max-w-xl mx-auto px-4 py-3">
         <div className="flex items-center space-x-4">
           {/* App Icon */}
@@ -52,7 +52,7 @@ const InstallPrompt = () => {
               </div>
               <span className="text-gray-300 dark:text-gray-600">•</span>
               <span className="text-xs text-gray-500 dark:text-gray-400">
-                100K+ installs
+                1M+ installs
               </span>
             </div>
           </div>
