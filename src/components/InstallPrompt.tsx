@@ -7,12 +7,26 @@ const InstallPrompt = () => {
   const { isInstallable, showPrompt, handleInstallClick } = useInstallPrompt();
   const [dismissed, setDismissed] = React.useState(false);
 
+  const handleDismiss = () => {
+    setDismissed(true);
+    localStorage.setItem('pwa-dismissed', 'true');
+  };
+
+  // Check if already installed or dismissed
+  React.useEffect(() => {
+    const hasInstalled = localStorage.getItem('pwa-installed');
+    const hasDismissed = localStorage.getItem('pwa-dismissed');
+    if (hasInstalled || hasDismissed) {
+      setDismissed(true);
+    }
+  }, []);
+
   if (!isInstallable || !showPrompt || dismissed) return null;
 
   return (
     <div className="fixed bottom-16 left-4 right-4 bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500 rounded-xl shadow-2xl p-6 mx-auto max-w-md border border-pink-400/20 z-50 backdrop-blur-sm bg-opacity-95">
       <button
-        onClick={() => setDismissed(true)}
+        onClick={handleDismiss}
         className="absolute top-3 right-3 text-white/80 hover:text-white transition-colors"
         aria-label="Close"
       >
@@ -36,7 +50,7 @@ const InstallPrompt = () => {
             Add to Home Screen
           </Button>
           <button
-            onClick={() => setDismissed(true)}
+            onClick={handleDismiss}
             className="text-white/80 hover:text-white text-sm mt-2 transition-colors"
           >
             Maybe Later

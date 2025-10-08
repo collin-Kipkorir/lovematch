@@ -49,5 +49,14 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Debug PWA installation
+      window.addEventListener('beforeinstallprompt', (e) => {
+        console.log('👋 PWA: beforeinstallprompt fired');
+      });
+      window.addEventListener('appinstalled', (e) => {
+        console.log('👋 PWA: Successfully installed');
+      });
+    </script>
   </body>
 </html>
