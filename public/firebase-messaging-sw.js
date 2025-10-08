@@ -1,5 +1,46 @@
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
+// Service Worker for Notifications
+const NOTIFICATION_INTERVAL = 3 * 60 * 60 * 1000; // 3 hours in milliseconds
+const MIN_INTERVAL = 30 * 60 * 1000; // 30 minutes minimum between notifications
+
+// Notification templates
+const notificationTemplates = [
+  {
+    title: "New Matches Nearby! 💕",
+    body: "Someone special might be just around the corner. Check out new profiles in your area!",
+    icon: "/icons/icon-192x192.png",
+    action: "/matches"
+  },
+  {
+    title: "You're Popular! 🌟",
+    body: "Someone liked your profile in the last hour. See who it might be!",
+    icon: "/icons/icon-192x192.png",
+    action: "/profile"
+  },
+  {
+    title: "Don't Miss Out! 💬",
+    body: "Someone is interested in chatting with you. Open the app to connect!",
+    icon: "/icons/icon-192x192.png",
+    action: "/chats"
+  },
+  {
+    title: "Your Perfect Match? ❤️",
+    body: "We found someone who matches your interests! Check them out now.",
+    icon: "/icons/icon-192x192.png",
+    action: "/matches"
+  },
+  {
+    title: "Love is in the Air! 💫",
+    body: "Your profile is getting attention! Log in to see who's interested.",
+    icon: "/icons/icon-192x192.png",
+    action: "/profile"
+  },
+  {
+    title: "Weekend Special! 🎉",
+    body: "More singles are active now! It's the perfect time to find your match.",
+    icon: "/icons/icon-192x192.png",
+    action: "/"
+  }
+];
 
 // Message type handlers
 const messageHandlers = {
@@ -23,47 +64,91 @@ const messageHandlers = {
   })
 };
 
-firebase.initializeApp({
-  apiKey: "AIzaSyCjm2rR2H57hj1kP5iXjBDXDpZhV7xAE6E",
-  authDomain: "lovematch-e5642.firebaseapp.com",
-  databaseURL: "https://lovematch-e5642-default-rtdb.firebaseio.com",
-  projectId: "lovematch-e5642",
-  storageBucket: "lovematch-e5642.firebasestorage.app",
-  messagingSenderId: "756020356395",
-  appId: "1:756020356395:web:da0072c699f43ded1b516e",
-  measurementId: "G-1X0FCLF7LH"
-});
+// Function to get a random notification template
+function getRandomNotification() {
+  const randomIndex = Math.floor(Math.random() * notificationTemplates.length);
+  return notificationTemplates[randomIndex];
+}
 
-const messaging = firebase.messaging();
+// Function to show notification
+async function showNotification() {
+  const lastNotification = await self.registration.getNotifications();
+  if (lastNotification.length > 0) {
+    // Don't show too many notifications at once
+    return;
+  }
 
-// Background message handler
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message ', payload);
-
-  const notificationTitle = payload.notification?.title || 'New Message';
-  const notificationOptions = {
-    body: payload.notification?.body || 'You have a new message',
-    icon: '/opengraph-image.png',
+  const template = getRandomNotification();
+  const options = {
+    body: template.body,
+    icon: template.icon,
     badge: '/favicon.ico',
-    tag: payload.data?.messageId || 'new-message',
-    data: payload.data,
+    tag: 'engagement-notification',
+    data: { url: template.action },
     renotify: true,
     requireInteraction: true,
     actions: [
       {
         action: 'view',
-        title: 'View Message'
+        title: 'View Now'
       },
       {
         action: 'close',
-        title: 'Dismiss'
+        title: 'Not Now'
       }
     ],
-    // Vibration pattern
     vibrate: [200, 100, 200]
   };
 
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  try {
+    await self.registration.showNotification(template.title, options);
+    // Store the last notification time
+    await self.registration.putValue('lastNotificationTime', Date.now());
+  } catch (error) {
+    console.error('Error showing notification:', error);
+  }
+}
+
+// Function to check if it's a good time to show notification (between 9 AM and 10 PM)
+function isGoodTimeToNotify() {
+  const now = new Date();
+  const hours = now.getHours();
+  return hours >= 9 && hours <= 22;
+}
+
+// Function to schedule next notification
+async function scheduleNextNotification() {
+  const lastTime = await self.registration.getValue('lastNotificationTime') || 0;
+  const now = Date.now();
+  const timeSinceLastNotification = now - lastTime;
+
+  // Only show notification if enough time has passed and it's a good time
+  if (timeSinceLastNotification >= MIN_INTERVAL && isGoodTimeToNotify()) {
+    await showNotification();
+  }
+
+  // Schedule next check
+  setTimeout(() => scheduleNextNotification(), Math.min(NOTIFICATION_INTERVAL, MIN_INTERVAL));
+}
+
+// Service worker install event
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    Promise.all([
+      self.skipWaiting(),
+      self.registration.putValue('lastNotificationTime', Date.now())
+    ])
+  );
+});
+
+// Service worker activate event
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      scheduleNextNotification()
+    ])
+  );
 });
 
 // Notification click handler
@@ -80,31 +165,18 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
 
-  // Determine the URL to open based on notification type and data
-  let urlToOpen;
-  if (data.chatId) {
-    urlToOpen = new URL(`/chat/${data.chatId}`, self.location.origin).href;
-  } else if (data.type === 'match') {
-    urlToOpen = new URL('/matches', self.location.origin).href;
-  } else if (data.type === 'like') {
-    urlToOpen = new URL('/profile', self.location.origin).href;
-  } else {
-    urlToOpen = new URL('/chats', self.location.origin).href;
-  }
+  // Get the URL to open
+  const urlToOpen = new URL(data.url || '/', self.location.origin).href;
 
   const promiseChain = clients.matchAll({
     type: 'window',
     includeUncontrolled: true
   })
   .then((windowClients) => {
-    // Check if there is already a window/tab open with the target URL
+    // Check if there is already a window/tab open
     for (let i = 0; i < windowClients.length; i++) {
       const client = windowClients[i];
-      // If we have an exact URL match, focus that window
-      if (client.url === urlToOpen && 'focus' in client) {
-        return client.focus();
-      }
-      // If we have a window open to any page in our app, navigate it to the target URL
+      // If we have a window open to any page in our app, navigate it
       if (client.url.startsWith(self.location.origin) && 'focus' in client) {
         return Promise.all([
           client.focus(),
@@ -119,4 +191,5 @@ self.addEventListener('notificationclick', (event) => {
   });
 
   event.waitUntil(promiseChain);
+});
 });

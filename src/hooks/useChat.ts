@@ -16,6 +16,22 @@ export const useChat = (otherUserId?: string) => {
   const [otherUserPublicKey, setOtherUserPublicKey] = useState<CryptoKey | null>(null);
   const { toast } = useToast();
 
+  // Request notification permission when chat is opened
+  useEffect(() => {
+    if (!('Notification' in window)) return;
+
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          toast({
+            title: 'Notifications Enabled',
+            description: 'You will now receive message notifications',
+          });
+        }
+      });
+    }
+  }, [toast]);
+
   // Extend ChatMessage to allow encryptedContent for internal use
   type ChatMessageWithEncrypted = ChatMessage & { encryptedContent?: string };
 
@@ -125,6 +141,28 @@ export const useChat = (otherUserId?: string) => {
     const chatId = [user.id, otherUserId].sort().join('_');
     const chatRef = ref(database, `chats/${chatId}/messages`);
 
+    // Function to show in-app notification
+    const showInAppNotification = (message: ChatMessage, senderName: string) => {
+      if (message.receiverId === user.id && !message.read && Notification.permission === 'granted') {
+        const notification = new Notification(senderName || 'New Message', {
+          body: message.content || 'You have received a new message',
+          icon: '/opengraph-image.png',
+          tag: `chat_${chatId}`,
+          requireInteraction: true
+        });
+
+        notification.onclick = () => {
+          notification.close();
+          window.focus();
+          window.location.href = `/chat/${chatId}`;
+        };
+
+        // Play notification sound
+        const audio = new Audio('/notification-sound.mp3');
+        audio.play().catch(err => console.log('Failed to play notification sound:', err));
+      }
+    };
+
     // Listen for new messages
     const unsubscribe = onValue(chatRef, async (snapshot) => {
       if (snapshot.exists() && keyPair) {
@@ -147,9 +185,24 @@ export const useChat = (otherUserId?: string) => {
           })
         );
         // Sort messages by timestamp
-        setMessages(decryptedMessages.sort((a, b) => a.timestamp - b.timestamp));
+        const sortedMessages = decryptedMessages.sort((a, b) => a.timestamp - b.timestamp);
+        setMessages(sortedMessages);
+        
         // Update localStorage cache
-        localCache.messages.set(chatId, decryptedMessages);
+        localCache.messages.set(chatId, sortedMessages);
+
+        // Check for new messages and show notifications
+        const lastMessage = sortedMessages[sortedMessages.length - 1];
+        if (lastMessage && lastMessage.timestamp > Date.now() - 1000 && lastMessage.receiverId === user.id) {
+          // Get sender's name from database
+          const senderRef = ref(database, `users/${lastMessage.senderId}/displayName`);
+          const senderSnapshot = await get(senderRef);
+          const senderName = senderSnapshot.exists() ? senderSnapshot.val() : 'Someone';
+          
+          // Show in-app notification
+          showInAppNotification(lastMessage, senderName);
+        }
+        
         // Mark messages as read if they're for the current user
         const unreadMessages = messagesList.filter(
           msg => msg.receiverId === user.id && !msg.read
@@ -254,6 +307,20 @@ export const useChat = (otherUserId?: string) => {
       const unreadSnapshot = await get(unreadRef);
       const currentUnread = unreadSnapshot.exists() ? unreadSnapshot.val() : 0;
       await set(unreadRef, currentUnread + 1);
+
+      // Send notification data
+      const notificationRef = ref(database, `notifications/${otherUserId}`);
+      const notificationData = {
+        type: 'message',
+        senderId: user.id,
+        senderName: user.displayName || 'Someone',
+        chatId,
+        message: content.substring(0, 100),
+        timestamp: Date.now(),
+        read: false
+      };
+      await push(notificationRef, notificationData);
+
       toast({
         title: "Message Sent",
         description: `Remaining credits: ${user.credits - 1}`,
