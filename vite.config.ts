@@ -10,6 +10,17 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
   },
   base: '/',
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+        inlineDynamicImports: false,
+      },
+    },
+    sourcemap: true,
+  },
   plugins: [
     react(),
     mode === 'development' &&
