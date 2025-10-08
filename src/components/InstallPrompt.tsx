@@ -10,28 +10,49 @@ const InstallPrompt = () => {
   if (!isInstallable || !showPrompt || dismissed) return null;
 
   return (
-    <div className="fixed bottom-16 left-4 right-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 mx-auto max-w-md border border-gray-200 dark:border-gray-700 z-50">
+    <div className="fixed bottom-16 left-4 right-4 bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500 rounded-xl shadow-2xl p-6 mx-auto max-w-md border border-pink-400/20 z-50 backdrop-blur-sm bg-opacity-95">
       <button
         onClick={() => setDismissed(true)}
-        className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        className="absolute top-3 right-3 text-white/80 hover:text-white transition-colors"
+        aria-label="Close"
       >
-        <X size={20} />
+        <X size={24} />
       </button>
-      <div className="flex items-center space-x-4">
-        <div className="flex-shrink-0">
-          <img src="/opengraph-image.png" alt="LoveMatch" className="w-16 h-16 rounded-xl" />
+      
+      <div className="flex flex-col items-center text-center mb-4">
+        <div className="flex-shrink-0 mb-4 relative">
+          <div className="absolute inset-0 bg-white/20 rounded-2xl blur-xl"></div>
+          <img src="/icons/icon-192x192.png" alt="LoveMatch" className="w-20 h-20 rounded-2xl relative z-10 border-2 border-white/50" />
         </div>
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold mb-1 dark:text-white">Install LoveMatch App</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
-            Install our app for a better experience and quick access!
-          </p>
+        <h3 className="text-2xl font-bold text-white mb-2">Install LoveMatch</h3>
+        <p className="text-white/90 mb-4 max-w-xs">
+          Get the best dating experience with our app! Access your matches and chats instantly.
+        </p>
+        <div className="flex flex-col w-full gap-2">
           <Button
             onClick={handleInstallClick}
-            className="w-full bg-pink-600 hover:bg-pink-700 text-white"
+            className="w-full bg-white text-pink-600 hover:bg-pink-50 font-semibold text-lg py-6 rounded-xl shadow-lg transition-transform transform hover:scale-105"
           >
-            Install App
+            Add to Home Screen
           </Button>
+          <button
+            onClick={() => setDismissed(true)}
+            className="text-white/80 hover:text-white text-sm mt-2 transition-colors"
+          >
+            Maybe Later
+          </button>
+        </div>
+      </div>
+      
+      <div className="flex items-center justify-center gap-4 mt-4 pt-4 border-t border-white/20">
+        <div className="flex flex-col items-center">
+          <span className="text-white/90 text-sm">⚡ Fast Access</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <span className="text-white/90 text-sm">📱 Better Experience</span>
+        </div>
+        <div className="flex flex-col items-center">
+          <span className="text-white/90 text-sm">💫 Get Updates</span>
         </div>
       </div>
     </div>
