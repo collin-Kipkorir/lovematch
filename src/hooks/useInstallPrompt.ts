@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
+  prompt: () => Promise<{ outcome: 'accepted' | 'dismissed' }>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
@@ -37,9 +37,9 @@ export function useInstallPrompt() {
 
     // Check if it's installable
     const checkInstallable = async () => {
-      if ('getInstalledRelatedApps' in navigator) {
+      if (navigator.getInstalledRelatedApps) {
         try {
-          const relatedApps = await (navigator as any).getInstalledRelatedApps();
+          const relatedApps = await navigator.getInstalledRelatedApps();
           const isInstalled = relatedApps.length > 0;
           if (isInstalled) {
             localStorage.setItem('pwa-installed', 'true');
@@ -78,14 +78,17 @@ export function useInstallPrompt() {
     };
   }, [hasVisited]);
 
-  const handleInstallClick = async () => {
+    const handleInstallClick = async () => {
     if (!prompt) return;
 
-    const result = await prompt.prompt();
-    if (result.userChoice.outcome === 'accepted') {
-      setIsInstallable(false);
+    try {
+      const result = await prompt.prompt();
+      if (result.outcome === 'accepted') {
+        setIsInstallable(false);
+        localStorage.setItem('pwa-installed', 'true');
+      }
+    } catch (error) {
+      console.error('Failed to show install prompt:', error);
     }
-  };
-
-  return { isInstallable, showPrompt, handleInstallClick };
+  };  return { isInstallable, showPrompt, handleInstallClick };
 }

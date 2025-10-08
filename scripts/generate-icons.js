@@ -1,10 +1,14 @@
-const fs = require('fs');
-const sharp = require('sharp');
-const path = require('path');
+import fs from 'fs';
+import sharp from 'sharp';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
-const sourceImage = path.join(__dirname, 'public', 'opengraph-image.png');
-const outputDir = path.join(__dirname, 'public', 'icons');
+const sourceImage = path.join(__dirname, '..', 'public', 'opengraph-image.png');
+const outputDir = path.join(__dirname, '..', 'public', 'icons');
 
 // Create output directory if it doesn't exist
 if (!fs.existsSync(outputDir)) {
