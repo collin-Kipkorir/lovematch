@@ -1,8 +1,9 @@
-// Enhanced Service Worker with versioning and better caching
+// Service Worker for Notifications
 const CACHE_VERSION = 'v1';
 const CACHE = `lovematch-${CACHE_VERSION}`;
-const NOTIFICATION_INTERVAL = 10 * 60 * 1000; // 10 minutes in milliseconds
-const MIN_INTERVAL = 10 * 60 * 1000; // 10 minutes minimum between notifications
+const NOTIFICATION_INTERVAL = 2 * 60 * 1000; // 2 minutes in milliseconds
+const MIN_INTERVAL = 2 * 60 * 1000; // 2 minutes minimum between notifications
+const DEBUG = true; // Enable debug mode for testing
 
 // Notification templates
 const notificationTemplates = [
@@ -54,17 +55,7 @@ function getRandomNotification() {
 
 // Function to show notification
 async function showNotification() {
-  console.log('Attempting to show notification...');
-  
-  // Check notification permission
-  if (Notification.permission !== 'granted') {
-    console.log('Notification permission not granted');
-    return;
-  }
-
   const template = getRandomNotification();
-  console.log('Selected notification template:', template);
-
   const options = {
     body: template.body,
     icon: template.icon,
@@ -87,30 +78,11 @@ async function showNotification() {
   };
 
   try {
-    // Test if we can show notifications
-    if (!self.registration.showNotification) {
-      console.error('Notifications not supported');
-      return;
-    }
-
     await self.registration.showNotification(template.title, options);
-    const now = Date.now();
-    console.log('Notification shown successfully at:', new Date(now).toLocaleString());
-    
     // Store last notification time
-    await self.registration.putValue('lastNotificationTime', now);
-    console.log('Notification time stored');
+    await self.registration.putValue('lastNotificationTime', Date.now());
   } catch (error) {
     console.error('Error showing notification:', error);
-    // Try to show a simpler notification as fallback
-    try {
-      await self.registration.showNotification('LoveMatch', {
-        body: template.body,
-        icon: template.icon
-      });
-    } catch (fallbackError) {
-      console.error('Fallback notification also failed:', fallbackError);
-    }
   }
 }
 
@@ -123,42 +95,21 @@ function isGoodTimeToNotify() {
 
 // Function to schedule next notification
 async function scheduleNextNotification() {
-  console.log('Scheduling next notification...');
-  
   try {
-    const lastTime = await self.registration.getValue('lastNotificationTime') || 0;
-    const now = Date.now();
-    const timeSinceLastNotification = now - lastTime;
-
-    console.log('Time since last notification:', Math.floor(timeSinceLastNotification / 1000), 'seconds');
-    console.log('Current hour:', new Date().getHours());
-    console.log('Is good time to notify:', isGoodTimeToNotify());
-
-    // Show notification if minimum time has passed
-    if (timeSinceLastNotification >= MIN_INTERVAL && isGoodTimeToNotify()) {
-      console.log('Conditions met, showing notification...');
-      await showNotification();
-    } else {
-      console.log('Skipping notification:', {
-        timePassed: timeSinceLastNotification >= MIN_INTERVAL,
-        goodTime: isGoodTimeToNotify()
-      });
-    }
-
-    // Clear any existing timer
-    if (notificationTimer) {
-      clearTimeout(notificationTimer);
-    }
-
-    // Schedule next notification immediately for testing
-    console.log('Scheduling next check in:', NOTIFICATION_INTERVAL / 1000, 'seconds');
+    if (DEBUG) console.log('Scheduling next notification...');
+    
+    // Always show notification in debug mode
+    await showNotification();
+    
+    if (DEBUG) console.log('Notification shown, scheduling next one in 2 minutes');
+    
+    // Schedule next notification
+    clearTimeout(notificationTimer); // Clear any existing timer
     notificationTimer = setTimeout(scheduleNextNotification, NOTIFICATION_INTERVAL);
   } catch (error) {
     console.error('Error in scheduleNextNotification:', error);
-    // Retry scheduling with exponential backoff
-    const retryDelay = Math.min(NOTIFICATION_INTERVAL, 60000); // Max 1 minute retry delay
-    console.log('Retrying in', retryDelay / 1000, 'seconds');
-    notificationTimer = setTimeout(scheduleNextNotification, retryDelay);
+    // Retry scheduling in case of error
+    notificationTimer = setTimeout(scheduleNextNotification, NOTIFICATION_INTERVAL);
   }
 }
 
@@ -199,8 +150,6 @@ self.addEventListener("install", function (event) {
 });
 
 self.addEventListener("activate", function(event) {
-  console.log('Service Worker activating...');
-  
   event.waitUntil(
     Promise.all([
       caches.keys().then(function(cacheNames) {
@@ -213,26 +162,7 @@ self.addEventListener("activate", function(event) {
         );
       }),
       self.clients.claim(),
-      // Send test notification immediately
-      (async () => {
-        try {
-          console.log('Sending test notification...');
-          await showNotification();
-          console.log('Test notification sent successfully');
-        } catch (error) {
-          console.error('Test notification failed:', error);
-        }
-        return scheduleNextNotification();
-      })(),
-      // Broadcast activation
-      self.clients.matchAll().then(clients => {
-        clients.forEach(client => {
-          client.postMessage({
-            type: 'SW_ACTIVATED',
-            timestamp: Date.now()
-          });
-        });
-      })
+      scheduleNextNotification()
     ])
   );
 });
