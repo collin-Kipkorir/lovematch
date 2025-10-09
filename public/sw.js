@@ -5,45 +5,81 @@ const NOTIFICATION_INTERVAL = 2 * 60 * 1000; // 2 minutes in milliseconds
 const MIN_INTERVAL = 2 * 60 * 1000; // 2 minutes minimum between notifications
 const DEBUG = true; // Enable debug mode for testing
 
-// Notification templates
 const notificationTemplates = [
   {
-    title: "New Matches Nearby! 💕",
-    body: "Someone special might be just around the corner. Check out new profiles in your area!",
+    title: "💌 Someone just liked your profile!",
+    body: "They think you’re amazing 😍 — open the app to see who’s crushing on you!",
+    icon: "/icons/icon-192x192.png",
+    action: "/matches"
+  },
+  {
+    title: "📩 New Message from {name}",
+    body: "Someone just sent you a message — don’t keep them waiting 😉",
+    icon: "/icons/icon-192x192.png",
+    action: "/chat/{chatId}"
+  },
+  {
+    title: "✨ You’ve got a new admirer!",
+    body: "Someone  can’t stop looking at your profile 👀. Check who it is!",
+    icon: "/icons/icon-192x192.png",
+    action: "/likes"
+  },
+  {
+    title: "❤️ Match Found!",
+    body: "We found someone who shares your love  Say hello now!",
+    icon: "/icons/icon-192x192.png",
+    action: "/matches"
+  },
+  {
+    title: "🔥 You’re Trending!",
+    body: "Your profile got 25 new views today! See who’s checking you out 😉",
+    icon: "/icons/icon-192x192.png",
+    action: "/views"
+  },
+  {
+    title: "💬 Someone replied to your message!",
+    body: "They just replied — keep the spark going 🔥",
+    icon: "/icons/icon-192x192.png",
+    action: "/chat/{chatId}"
+  },
+  {
+    title: "🌍 Someone abroad liked you!",
+    body: "A user from {country} liked your vibe 😘. Premium users can chat instantly!",
+    icon: "/icons/icon-192x192.png",
+    action: "/premium"
+  },
+  {
+    title: "🎁 Unlock More Matches!",
+    body: "Boost your visibility and get noticed by more singles near you 💫",
+    icon: "/icons/icon-192x192.png",
+    action: "/boost"
+  },
+  {
+    title: "⏰ Don’t miss out!",
+    body: "{name} is online right now — chat before they log off!",
+    icon: "/icons/icon-192x192.png",
+    action: "/chat/{chatId}"
+  },
+  {
+    title: "💖 It’s a Match!",
+    body: "You and ... liked each other! Start chatting and see where it goes 💬",
+    icon: "/icons/icon-192x192.png",
+    action: "/matches"
+  },
+  {
+    title: "🎉 Weekend Love Rush!",
+    body: "More users are active this weekend. Open the app and find your perfect match!",
     icon: "/icons/icon-192x192.png",
     action: "/"
   },
   {
-    title: "You're Popular! 🌟",
-    body: "Someone liked your profile in the last hour. See who it might be!",
+    title: "👀 Someone viewed your profile!",
+    body: "Someone checked you out recently… maybe it’s time to say hi 😉",
     icon: "/icons/icon-192x192.png",
-    action: "/"
-  },
-  {
-    title: "Don't Miss Out! 💬",
-    body: "Someone is interested in chatting with you. Open the app to connect!",
-    icon: "/icons/icon-192x192.png",
-    action: "/"
-  },
-  {
-    title: "Your Perfect Match? ❤️",
-    body: "We found someone who matches your interests! Check them out now.",
-    icon: "/icons/icon-192x192.png",
-    action: "/"
-  },
-  {
-    title: "Love is in the Air! 💫",
-    body: "Your profile is getting attention! Log in to see who's interested.",
-    icon: "/icons/icon-192x192.png",
-    action: "/"
-  },
-  {
-    title: "Weekend Special! 🎉",
-    body: "More singles are active now! It's the perfect time to find your match.",
-    icon: "/icons/icon-192x192.png",
-    action: "/"
+    action: "/views"
   }
 ];
+
 
 let notificationTimer;
 
@@ -94,7 +130,7 @@ function isGoodTimeToNotify() {
 }
 
 // Function to start periodic notifications
-function startPeriodicNotifications() {
+async function startPeriodicNotifications() {
   if (DEBUG) console.log('Starting periodic notifications...');
   
   // Clear any existing timer
@@ -102,13 +138,20 @@ function startPeriodicNotifications() {
     clearInterval(notificationTimer);
   }
 
-  // Show first notification immediately
-  showNotification();
+  // Show first notification after a short delay
+  setTimeout(() => showNotification(), 5000);
 
   // Set up recurring notifications
-  notificationTimer = setInterval(() => {
-    if (isGoodTimeToNotify()) {
-      showNotification();
+  notificationTimer = setInterval(async () => {
+    try {
+      if (DEBUG) console.log('Checking for notification time...');
+      
+      // Always show notification in debug mode
+      await showNotification();
+      
+      if (DEBUG) console.log('Notification shown successfully');
+    } catch (error) {
+      console.error('Error in notification interval:', error);
     }
   }, NOTIFICATION_INTERVAL);
 
@@ -173,6 +216,22 @@ self.addEventListener("activate", function(event) {
 self.addEventListener('sync', function(event) {
   if (event.tag === 'sync-messages') {
     event.waitUntil(syncMessages());
+  }
+});
+
+// Listen for messages from the client
+self.addEventListener('message', (event) => {
+  if (DEBUG) console.log('Service Worker received message:', event.data);
+  
+  if (event.data && event.data.type === 'START_NOTIFICATIONS') {
+    startPeriodicNotifications();
+  }
+  
+  if (event.data && event.data.type === 'RESTART_NOTIFICATIONS') {
+    if (notificationTimer) {
+      clearInterval(notificationTimer);
+    }
+    startPeriodicNotifications();
   }
 });
 
