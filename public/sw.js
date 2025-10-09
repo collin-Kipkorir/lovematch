@@ -89,37 +89,63 @@ function getRandomNotification() {
   return notificationTemplates[randomIndex];
 }
 
-// Function to show notification
-async function showNotification() {
-  const template = getRandomNotification();
-  const options = {
-    body: template.body,
-    icon: template.icon,
-    badge: '/favicon.ico',
-    tag: 'engagement-notification',
-    data: { url: template.action },
-    renotify: true,
-    requireInteraction: true,
-    actions: [
-      {
-        action: 'view',
-        title: 'View Now'
-      },
-      {
-        action: 'close',
-        title: 'Not Now'
-      }
-    ],
-    vibrate: [200, 100, 200]
-  };
+// Maximum retries for showing a notification
+const MAX_NOTIFICATION_RETRIES = 3;
 
-  try {
-    await self.registration.showNotification(template.title, options);
-    // Store last notification time
-    await self.registration.putValue('lastNotificationTime', Date.now());
-  } catch (error) {
-    console.error('Error showing notification:', error);
-  }
+// Function to show notification with retries
+async function showNotification(retryCount = 0) {
+    const template = getRandomNotification();
+    const options = {
+        body: template.body,
+        icon: template.icon,
+        badge: '/favicon.ico',
+        tag: 'engagement-notification',
+        data: { url: template.action },
+        renotify: true,
+        requireInteraction: true,
+        silent: false,
+        persistent: true,
+        actions: [
+            {
+                action: 'view',
+                title: 'Open App'
+            }
+        ],
+        vibrate: [200, 100, 200, 100, 200]
+    };
+
+    try {
+        // Check if service worker is active
+        if (!self.registration.active) {
+            throw new Error('Service worker not active');
+        }
+
+        await self.registration.showNotification(template.title, options);
+        lastNotificationTime = Date.now();
+        
+        if (DEBUG) console.log('Notification shown successfully at:', new Date().toISOString());
+        
+        // Send success message to clients
+        const clients = await self.clients.matchAll();
+        clients.forEach(client => {
+            client.postMessage({ 
+                type: 'NOTIFICATION_SHOWN',
+                timestamp: lastNotificationTime
+            });
+        });
+    } catch (error) {
+        console.error('Error showing notification:', error);
+        
+        // Retry logic
+        if (retryCount < MAX_NOTIFICATION_RETRIES) {
+            if (DEBUG) console.log(`Retrying notification (${retryCount + 1}/${MAX_NOTIFICATION_RETRIES})...`);
+            setTimeout(() => showNotification(retryCount + 1), 1000);
+        } else {
+            // If all retries fail, try to restart the service worker
+            if (DEBUG) console.log('All retries failed, attempting to restart service worker...');
+            self.registration.update();
+        }
+    }
 }
 
 // Function to check if it's a good time to show notification (between 6 AM and 11 PM for more coverage)
@@ -129,33 +155,116 @@ function isGoodTimeToNotify() {
   return hours >= 6 && hours <= 23; // Extended hours for more frequent notifications
 }
 
+// Global interval IDs
+let globalNotificationInterval;
+let heartbeatInterval;
+let watchdogInterval;
+
+// Timestamp of last notification
+let lastNotificationTime = Date.now();
+
+// Function to send heartbeat
+async function sendHeartbeat() {
+    if (DEBUG) console.log('Sending heartbeat...');
+    const clients = await self.clients.matchAll();
+    clients.forEach(client => {
+        client.postMessage({ type: 'HEARTBEAT' });
+    });
+}
+
+// Watchdog function to monitor and restart if needed
+function watchdogCheck() {
+    const now = Date.now();
+    const timeSinceLastNotification = now - lastNotificationTime;
+    
+    if (timeSinceLastNotification > NOTIFICATION_INTERVAL * 2) {
+        if (DEBUG) console.log('Watchdog: Notifications appear to be stopped, restarting...');
+        startPeriodicNotifications();
+    }
+}
+
+// Function to ensure notification timer is running
+function ensureNotificationTimer() {
+    if (!globalNotificationInterval) {
+        if (DEBUG) console.log('Starting new notification interval');
+        globalNotificationInterval = setInterval(async () => {
+            await showNotification();
+            lastNotificationTime = Date.now();
+        }, NOTIFICATION_INTERVAL);
+    }
+    
+    // Ensure heartbeat is running
+    if (!heartbeatInterval) {
+        heartbeatInterval = setInterval(sendHeartbeat, 30000); // Heartbeat every 30 seconds
+    }
+    
+    // Ensure watchdog is running
+    if (!watchdogInterval) {
+        watchdogInterval = setInterval(watchdogCheck, 60000); // Check every minute
+    }
+}
+
 // Function to start periodic notifications
 async function startPeriodicNotifications() {
-  if (DEBUG) console.log('Starting periodic notifications...');
-  
-  // Clear any existing timer
-  if (notificationTimer) {
-    clearInterval(notificationTimer);
-  }
-
-  // Show first notification after a short delay
-  setTimeout(() => showNotification(), 5000);
-
-  // Set up recurring notifications
-  notificationTimer = setInterval(async () => {
-    try {
-      if (DEBUG) console.log('Checking for notification time...');
-      
-      // Always show notification in debug mode
-      await showNotification();
-      
-      if (DEBUG) console.log('Notification shown successfully');
-    } catch (error) {
-      console.error('Error in notification interval:', error);
+    if (DEBUG) console.log('Starting periodic notifications...', new Date().toISOString());
+    
+    // Clear all existing timers
+    if (notificationTimer) {
+        clearInterval(notificationTimer);
     }
-  }, NOTIFICATION_INTERVAL);
+    if (globalNotificationInterval) {
+        clearInterval(globalNotificationInterval);
+    }
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+    }
+    if (watchdogInterval) {
+        clearInterval(watchdogInterval);
+    }
 
-  if (DEBUG) console.log('Notification interval set to run every 2 minutes');
+    try {
+        // Show first notification immediately
+        await showNotification();
+        
+        // Set up the main notification interval
+        globalNotificationInterval = setInterval(showNotification, NOTIFICATION_INTERVAL);
+        
+        // Set up the heartbeat interval
+        heartbeatInterval = setInterval(sendHeartbeat, 30000);
+        
+        // Set up the watchdog interval
+        watchdogInterval = setInterval(watchdogCheck, 60000);
+        
+        // Set up a backup interval to ensure all timers keep running
+        notificationTimer = setInterval(() => {
+            ensureNotificationTimer();
+        }, NOTIFICATION_INTERVAL / 2);
+        
+        if (DEBUG) {
+            console.log('All intervals set up successfully:', {
+                notification: NOTIFICATION_INTERVAL,
+                heartbeat: 30000,
+                watchdog: 60000,
+                backup: NOTIFICATION_INTERVAL / 2
+            });
+        }
+
+        // Register periodic sync if available
+        try {
+            if ('periodicSync' in self.registration) {
+                await self.registration.periodicSync.register('notifications', {
+                    minInterval: NOTIFICATION_INTERVAL
+                });
+                if (DEBUG) console.log('Periodic sync registered');
+            }
+        } catch (syncError) {
+            console.warn('Periodic sync registration failed:', syncError);
+        }
+    } catch (error) {
+        console.error('Error in startPeriodicNotifications:', error);
+        // Retry after 5 seconds if there's an error
+        setTimeout(startPeriodicNotifications, 5000);
+    }
 }
 
 // Assets that will be cached on install
@@ -185,31 +294,38 @@ const shouldCache = (url) => {
 };
 
 self.addEventListener("install", function (event) {
-  event.waitUntil(
-    Promise.all([
-      self.skipWaiting(),
-      caches.open(CACHE).then(cache => cache.addAll(PRECACHE_ASSETS)),
-      self.registration.putValue('lastNotificationTime', Date.now())
-    ])
-  );
+    if (DEBUG) console.log('Service Worker installing...');
+    event.waitUntil(
+        Promise.all([
+            self.skipWaiting(),
+            caches.open(CACHE).then(cache => cache.addAll(PRECACHE_ASSETS))
+        ])
+    );
 });
 
 self.addEventListener("activate", function(event) {
-  event.waitUntil(
-    Promise.all([
-      caches.keys().then(function(cacheNames) {
-        return Promise.all(
-          cacheNames.map(function(cacheName) {
-            if (CACHE !== cacheName) {
-              return caches.delete(cacheName);
-            }
-          })
-        );
-      }),
-      self.clients.claim(),
-      startPeriodicNotifications() // Start notifications on activation
-    ])
-  );
+    if (DEBUG) console.log('Service Worker activating...');
+    event.waitUntil(
+        Promise.all([
+            caches.keys().then(function(cacheNames) {
+                return Promise.all(
+                    cacheNames.map(function(cacheName) {
+                        if (CACHE !== cacheName) {
+                            return caches.delete(cacheName);
+                        }
+                    })
+                );
+            }),
+            self.clients.claim(),
+            startPeriodicNotifications() // Start notifications on activation
+        ])
+    );
+
+    // Set up periodic check to ensure notifications are running
+    setInterval(() => {
+        if (DEBUG) console.log('Periodic check for notification service');
+        ensureNotificationTimer();
+    }, 60000); // Check every minute
 });
 
 // Background sync for offline messages
@@ -278,11 +394,17 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(promiseChain);
 });
 
-// Clean up timer on service worker termination
+// Clean up timers on service worker termination
 self.addEventListener('terminate', () => {
-  if (notificationTimer) {
-    clearInterval(notificationTimer);
-  }
+    if (DEBUG) console.log('Service Worker terminating...');
+    if (notificationTimer) {
+        clearInterval(notificationTimer);
+    }
+    if (globalNotificationInterval) {
+        clearInterval(globalNotificationInterval);
+    }
+    // Attempt to restart notifications before terminating
+    startPeriodicNotifications();
 });
 
 // Enhanced fetch handler with network-first strategy for API calls
