@@ -11,31 +11,31 @@ const notificationTemplates = [
     title: "New Matches Nearby! 💕",
     body: "Someone special might be just around the corner. Check out new profiles in your area!",
     icon: "/icons/icon-192x192.png",
-    action: "/matches"
+    action: "/"
   },
   {
     title: "You're Popular! 🌟",
     body: "Someone liked your profile in the last hour. See who it might be!",
     icon: "/icons/icon-192x192.png",
-    action: "/profile"
+    action: "/"
   },
   {
     title: "Don't Miss Out! 💬",
     body: "Someone is interested in chatting with you. Open the app to connect!",
     icon: "/icons/icon-192x192.png",
-    action: "/chats"
+    action: "/"
   },
   {
     title: "Your Perfect Match? ❤️",
     body: "We found someone who matches your interests! Check them out now.",
     icon: "/icons/icon-192x192.png",
-    action: "/matches"
+    action: "/"
   },
   {
     title: "Love is in the Air! 💫",
     body: "Your profile is getting attention! Log in to see who's interested.",
     icon: "/icons/icon-192x192.png",
-    action: "/profile"
+    action: "/"
   },
   {
     title: "Weekend Special! 🎉",
@@ -93,24 +93,26 @@ function isGoodTimeToNotify() {
   return hours >= 6 && hours <= 23; // Extended hours for more frequent notifications
 }
 
-// Function to schedule next notification
-async function scheduleNextNotification() {
-  try {
-    if (DEBUG) console.log('Scheduling next notification...');
-    
-    // Always show notification in debug mode
-    await showNotification();
-    
-    if (DEBUG) console.log('Notification shown, scheduling next one in 2 minutes');
-    
-    // Schedule next notification
-    clearTimeout(notificationTimer); // Clear any existing timer
-    notificationTimer = setTimeout(scheduleNextNotification, NOTIFICATION_INTERVAL);
-  } catch (error) {
-    console.error('Error in scheduleNextNotification:', error);
-    // Retry scheduling in case of error
-    notificationTimer = setTimeout(scheduleNextNotification, NOTIFICATION_INTERVAL);
+// Function to start periodic notifications
+function startPeriodicNotifications() {
+  if (DEBUG) console.log('Starting periodic notifications...');
+  
+  // Clear any existing timer
+  if (notificationTimer) {
+    clearInterval(notificationTimer);
   }
+
+  // Show first notification immediately
+  showNotification();
+
+  // Set up recurring notifications
+  notificationTimer = setInterval(() => {
+    if (isGoodTimeToNotify()) {
+      showNotification();
+    }
+  }, NOTIFICATION_INTERVAL);
+
+  if (DEBUG) console.log('Notification interval set to run every 2 minutes');
 }
 
 // Assets that will be cached on install
@@ -162,7 +164,7 @@ self.addEventListener("activate", function(event) {
         );
       }),
       self.clients.claim(),
-      scheduleNextNotification()
+      startPeriodicNotifications() // Start notifications on activation
     ])
   );
 });
@@ -220,7 +222,7 @@ self.addEventListener('notificationclick', (event) => {
 // Clean up timer on service worker termination
 self.addEventListener('terminate', () => {
   if (notificationTimer) {
-    clearTimeout(notificationTimer);
+    clearInterval(notificationTimer);
   }
 });
 
