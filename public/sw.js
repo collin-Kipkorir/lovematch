@@ -1,4 +1,4 @@
-// Service Worker for Notifications
+4// Service Worker for Notifications
 const CACHE_VERSION = 'v1';
 const CACHE = `lovematch-${CACHE_VERSION}`;
 const NOTIFICATION_INTERVAL = 2 * 60 * 1000; // 2 minutes in milliseconds
