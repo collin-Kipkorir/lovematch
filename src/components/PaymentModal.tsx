@@ -8,6 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
+import { database } from '@/lib/firebase';
+import { ref, get, update, push, set } from 'firebase/database';
 import { CreditCard, MessageCircle, Video, Smartphone, Phone, ArrowLeft, CheckCircle, Copy, Zap, Receipt, Clock, AlertCircle } from 'lucide-react';
 
 interface PaymentModalProps {
@@ -25,8 +28,38 @@ interface CreditPackage {
 
 const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'message' }) => {
   const { toast } = useToast();
+  const { user, updateCredits, updateVideoCredits } = useAuth();
   const [step, setStep] = useState<'packages' | 'payment' | 'agent' | 'mpesa' | 'stk-payment' | 'manual-payment'>('packages');
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
+
+  const handleSuccessfulPayment = async () => {
+    if (!user || !selectedPackage) return;
+    
+    try {
+      // 1. Update user's credits based on package type
+      if (type === 'video') {
+        await updateVideoCredits(selectedPackage.credits);
+      } else {
+        await updateCredits(selectedPackage.credits);
+      }
+
+      // 2. Log the payment transaction
+      const transactionRef = push(ref(database, 'paymentTransactions'));
+      await set(transactionRef, {
+        userId: user.id,
+        packageType: type,
+        credits: selectedPackage.credits,
+        amount: selectedPackage.price,
+        paymentMethod: step === 'stk-payment' ? 'mpesa-stk' : 'mpesa-manual',
+        status: 'completed',
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      throw error;
+    }
+  };
   
   // STK Push states
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -147,7 +180,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
   };
 
   // TODO: Backend Integration - Handle PIN confirmation
-  const confirmPayment = () => {
+  const confirmPayment = async () => {
     if (pin.length !== 4) {
       toast({
         title: "Invalid PIN",
@@ -162,8 +195,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
     await verifyPaymentPIN(pin, checkoutRequestId);
     */
 
-    // Simulate payment completion
-    setTimeout(() => {
+      // Process successful payment
+    try {
+      await handleSuccessfulPayment();
       setStkStatus('success');
       toast({
         title: "Payment Successful!",
@@ -174,11 +208,27 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
         onClose();
         resetModal();
       }, 2000);
-    }, 1500);
+    } catch (error) {
+      console.error('Payment processing error:', error);
+      setStkStatus('failed');
+      toast({
+        title: "Error Processing Payment",
+        description: "There was an error adding credits. Please contact support.",
+        variant: "destructive"
+      });
+    }
   };
 
-  // TODO: Backend Integration - Verify M-Pesa message and prevent reuse
   const verifyMpesaMessage = async () => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to complete your payment",
+        variant: "destructive"
+      });
+      return;
+    }
+
     if (!mpesaMessage.trim()) {
       toast({
         title: "Message Required",
@@ -188,15 +238,63 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
       return;
     }
 
-    // Check if message was already used (TODO: This should be in backend database)
+    // Extract transaction ID from M-Pesa message
     const messageId = mpesaMessage.match(/[A-Z0-9]{8,}/)?.[0];
-    if (messageId && usedMessages.has(messageId + ' Confirmed')) {
+    if (!messageId) {
       toast({
-        title: "Message Already Used",
-        description: "This M-Pesa message has already been used. Each message can only be used once.",
+        title: "Invalid Message",
+        description: "Please paste the complete M-Pesa confirmation message",
         variant: "destructive"
       });
       return;
+    }
+
+    setIsVerifying(true);
+
+    try {
+      // Check if message was already used
+      const usedMessageRef = ref(database, `usedMpesaMessages/${messageId}`);
+      const snapshot = await get(usedMessageRef);
+
+      if (snapshot.exists()) {
+        toast({
+          title: "Message Already Used",
+          description: "This M-Pesa message has already been used. Each message can only be used once.",
+          variant: "destructive"
+        });
+        setIsVerifying(false);
+        return;
+      }
+
+      // Mark message as used
+      await set(usedMessageRef, {
+        userId: user.id,
+        message: mpesaMessage,
+        timestamp: new Date().toISOString()
+      });
+
+      // Process the payment
+      await handleSuccessfulPayment();
+
+      toast({
+        title: "Payment Verified!",
+        description: `${selectedPackage?.credits} credits have been added to your account.`,
+      });
+
+      setTimeout(() => {
+        onClose();
+        resetModal();
+      }, 2000);
+
+    } catch (error) {
+      console.error('Payment verification error:', error);
+      toast({
+        title: "Verification Failed",
+        description: "There was an error verifying your payment. Please contact support.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsVerifying(false);
     }
 
     setIsVerifying(true);

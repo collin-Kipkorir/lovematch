@@ -1,14 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Profile as RealProfile } from '@/hooks/useProfiles';
 import { Profile as DummyProfile } from '@/data/dummyProfiles';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { MessageCircle, MapPin, Heart, Video, Gift as GiftIcon, X } from 'lucide-react';
+import { MessageCircle, MapPin, Heart, Video, Gift as GiftIcon, X, Clock } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import PaymentModal from '@/components/PaymentModal';
+import { database } from '@/lib/firebase';
+import { ref, push, set, get, query, orderByChild, equalTo, onValue, off } from 'firebase/database';
 
 // ==========================
 // Single-file Profile Modal
@@ -37,12 +39,24 @@ const GIFT_CATALOG = [
   { id: 'lion', name: 'Lion', emoji: '🦁', cost: 500, description: 'Ultimate VIP gift', isPremium: true }
 ];
 
+interface Gift {
+  id: string;
+  fromUserId: string;
+  fromUserName: string;
+  giftId: string;
+  quantity: number;
+  emoji: string;
+  name: string;
+  timestamp: string;
+}
+
 const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose }) => {
   const { user, updateCredits, likedProfiles, toggleLikeProfile } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentType, setPaymentType] = useState<'message' | 'video' | 'credits'>('message');
+  const [receivedGifts, setReceivedGifts] = useState<Gift[]>([]);
 
   // Gift state
   const [isGiftOpen, setIsGiftOpen] = useState(false);
@@ -67,7 +81,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose })
     if (!user) return;
     navigate(`/chat/${profile.id}`);
     onClose();
-    toast({ title: 'Chat Opened', description: `You can now chat with ${profile.name}!` });
+  
   };
 
   const handleVideoCall = () => {
@@ -82,7 +96,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose })
     if (!user || !profile) return;
     toggleLikeProfile(profile.id);
     const liked = likedProfiles.includes(profile.id);
-    toast({ title: liked ? 'Removed from Favorites' : 'Added to Favorites', description: liked ? `Removed ${profile.name} from your favorites` : `Added ${profile.name} to your favorites!` });
+  
   };
 
   // -----------------------
@@ -96,8 +110,34 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose })
     setGiftQuantity(1);
   };
 
+  // Fetch received gifts when profile changes
+  useEffect(() => {
+    if (!profile) return;
+
+    const giftsRef = ref(database, 'userGifts');
+    const userGiftsQuery = query(giftsRef, orderByChild('toUserId'), equalTo(profile.id));
+    
+    const unsubscribe = onValue(userGiftsQuery, (snapshot) => {
+      const gifts: Gift[] = [];
+      snapshot.forEach((childSnapshot) => {
+        gifts.push({
+          id: childSnapshot.key!,
+          ...childSnapshot.val()
+        });
+      });
+      
+      // Sort by timestamp, newest first
+      gifts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setReceivedGifts(gifts);
+    });
+
+    return () => {
+      off(userGiftsQuery);
+    };
+  }, [profile]);
+
   const confirmGift = async () => {
-    if (!user || !selectedGift) return;
+    if (!user || !selectedGift || !profile) return;
     setIsSendingGift(true);
 
     // If using credit system
@@ -110,24 +150,41 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose })
     }
 
     try {
-      // 1) Optimistic UI: deduct credits locally (use context/provider to persist)
+      // 1) Optimistic UI: deduct credits locally
       updateCredits(-giftTotal);
 
-      // 2) Backend call: register gift transaction, notify recipient, analytics
-      // TODO: Replace with real API call
-      // await api.sendGift({ from: user.id, to: profile.id, giftId: selectedGift.id, quantity: giftQuantity, totalCost: giftTotal });
+      // 2) Save gift to Firebase
+      const giftRef = push(ref(database, 'userGifts'));
+      await set(giftRef, {
+        fromUserId: user.id,
+        fromUserName: user.name,
+        toUserId: profile.id,
+        toUserName: profile.name,
+        giftId: selectedGift.id,
+        name: selectedGift.name,
+        emoji: selectedGift.emoji,
+        quantity: giftQuantity,
+        cost: giftTotal,
+        timestamp: new Date().toISOString(),
+        isPremium: selectedGift.isPremium || false
+      });
 
       // 3) Provide UX feedback
-      toast({ title: 'Gift Sent!', description: `${selectedGift.emoji} ${selectedGift.name} x${giftQuantity} sent to ${profile.name}.` });
+      toast({ 
+        title: 'Gift Sent!', 
+        description: `${selectedGift.emoji} ${selectedGift.name} x${giftQuantity} sent to ${profile.name}.` 
+      });
+      
       setIsGiftOpen(false);
       setSelectedGift(null);
-
-      // Optionally: record activity to user_interactions & send push notification via cloud function
 
     } catch (err) {
       // Revert optimistic deduction on error
       updateCredits(giftTotal);
-      toast({ title: 'Gift Failed', description: 'There was an error sending your gift. Please try again.' });
+      toast({ 
+        title: 'Gift Failed', 
+        description: 'There was an error sending your gift. Please try again.' 
+      });
     } finally {
       setIsSendingGift(false);
     }
@@ -251,19 +308,23 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose })
               </div>
             </section>
 
-            <section className="bg-card p-4 rounded-lg shadow-sm">
-              <h3 className="font-semibold text-sm mb-2">More</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="p-3 rounded-lg border hover:shadow">🎵 Top interest: {profile.interests[0] || '—'}</div>
-                <div className="p-3 rounded-lg border hover:shadow bg-primary/5">
-                  <span className="flex items-center gap-1">
-                    ⭐ Verified: <span className="text-primary font-medium">Yes</span>
-                    <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
+            <section className="bg-card p-3 rounded-lg shadow-sm space-y-3">
+              <div>
+                <h3 className="font-semibold text-xs mb-1.5">More</h3>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div className="p-2 rounded-lg border hover:shadow text-xs flex items-center justify-center">🎵 Top interest: {profile.interests[0] || '—'}</div>
+                  <div className="p-2 rounded-lg border hover:shadow bg-primary/5 flex items-center justify-center">
+                    <span className="flex items-center gap-0.5 text-xs">
+                      ⭐ Verified: <span className="text-primary font-medium">Yes</span>
+                      <svg className="w-3 h-3 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                  </div>
                 </div>
               </div>
+
+        
             </section>
 
           </div>

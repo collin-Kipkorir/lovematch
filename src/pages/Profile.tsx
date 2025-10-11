@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import Header from '@/components/Layout/Header';
 import BottomNav from '@/components/Navigation/BottomNav';
 import EditProfileModal from '@/components/EditProfileModal';
+import GiftWithdrawalModal from '@/components/GiftWithdrawalModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, Heart, MessageCircle, Settings, Edit } from 'lucide-react';
+import { MapPin, Heart, MessageCircle, Settings, Edit, Gift, CreditCard } from 'lucide-react';
+import { database } from '@/lib/firebase';
+import { ref, query, orderByChild, equalTo, onValue, off } from 'firebase/database';
 
 /**
  * PROFILE PAGE - BACKEND INTEGRATION GUIDE
@@ -64,9 +67,58 @@ import { MapPin, Heart, MessageCircle, Settings, Edit } from 'lucide-react';
 const Profile: React.FC = () => {
   const { user } = useAuth();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
+  const [totalGifts, setTotalGifts] = useState(0);
 
-  if (!user) {
-    return null;
+  useEffect(() => {
+    if (!user?.id) return;
+
+    try {
+      // Set up real-time listener for gifts
+      const giftsRef = ref(database, 'userGifts');
+      const userGiftsQuery = query(giftsRef, orderByChild('toUserId'), equalTo(user.id));
+      
+      const giftListener = onValue(userGiftsQuery, (snapshot) => {
+        try {
+          let totalValue = 0;
+          
+          snapshot.forEach((childSnapshot) => {
+            const gift = childSnapshot.val();
+            // Include all gifts in total, with fallback values
+            const cost = gift.cost || 1;
+            const quantity = gift.quantity || 1;
+            totalValue += (cost * quantity);
+          });
+          
+          setTotalGifts(totalValue);
+        } catch (error) {
+          console.error('Error processing gift data:', error);
+          setTotalGifts(0); // Reset to safe value on error
+        }
+      }, (error) => {
+        console.error('Error fetching gifts:', error);
+        setTotalGifts(0);
+      });
+
+      // Cleanup listener on unmount
+      return () => {
+        off(userGiftsQuery);
+      };
+    } catch (error) {
+      console.error('Error setting up gift listener:', error);
+      setTotalGifts(0);
+    }
+  }, [user?.id]); // Only depend on user.id instead of entire user object
+
+  if (!user?.id) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-semibold">Loading Profile...</h2>
+          <p className="text-muted-foreground">Please wait while we fetch your information</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -82,7 +134,7 @@ const Profile: React.FC = () => {
                 <div className="relative group">
                   <div className="absolute -inset-1 bg-gradient-to-r from-primary to-primary/70 rounded-full opacity-75 group-hover:opacity-100 transition duration-300 blur-sm"></div>
                   <img
-                    src={user.profileImage || user.images?.[0] || '/placeholder.svg'}
+                    src={user.profileImage || '/placeholder.svg'}
                     alt={user.name}
                     className="relative w-28 h-28 rounded-full object-cover border-4 border-background shadow-xl"
                   />
@@ -167,51 +219,87 @@ const Profile: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Credits - Hide for admin/moderator users since they don't purchase credits */}
+          {/* Credits and Gifts - Hide for admin/moderator users */}
           {user.id !== 'admin' && (
-            <Card className="bg-gradient-to-br from-primary/5 via-card to-card border-primary/20">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                    <MessageCircle className="h-4 w-4 text-primary" />
-                  </div>
-                  Credits Balance
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <>
+              <Card className="bg-gradient-to-br from-primary/5 via-card to-card border-primary/20">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                      <MessageCircle className="h-4 w-4 text-primary" />
+                    </div>
+                    Credits Balance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
                   <div className="flex items-center justify-between p-4 bg-gradient-to-r from-background to-background/80 rounded-xl border border-border/50 shadow-sm">
                     <div className="flex items-center space-x-3">
                       <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
                         <MessageCircle className="h-5 w-5 text-primary" />
                       </div>
                       <div>
-                        <p className="font-medium text-foreground">Message Credits</p>
-                        <p className="text-xs text-muted-foreground">For messaging</p>
+                        <p className="font-medium text-foreground">Credits</p>
+                        <p className="text-xs text-muted-foreground">Available for use</p>
                       </div>
                     </div>
                     <span className="text-2xl font-bold text-primary">{user.credits}</span>
                   </div>
-                  <div className="flex items-center justify-between p-4 bg-gradient-to-r from-background to-background/80 rounded-xl border border-border/50 shadow-sm">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-lg bg-secondary/20 flex items-center justify-center">
-                        <span className="text-lg">📹</span>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-primary/5 via-card to-card border-primary/20">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                      <Gift className="h-4 w-4 text-primary" />
+                    </div>
+                    Earnings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-background to-background/80 rounded-xl border border-border/50 shadow-sm">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                          <Gift className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">Gift Balance</p>
+                          <p className="text-xs text-muted-foreground">
+                            {totalGifts >= 1000 
+                              ? "Eligible for withdrawal" 
+                              : `${1000 - totalGifts} more needed to withdraw`}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground">Video Credits</p>
-                        <p className="text-xs text-muted-foreground">For video calls</p>
+                      <div className="text-right space-y-1">
+                        <div>
+                          <span className="text-2xl font-bold text-primary">{totalGifts}</span>
+                          <span className="text-sm text-muted-foreground ml-1">gifts</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Earnings: <span className="font-semibold text-primary">KSH {Math.floor(totalGifts / 2).toLocaleString()}</span>
+                        </div>
                       </div>
                     </div>
-                    <span className="text-2xl font-bold text-secondary-foreground">{user.videoCredits}</span>
+
+                    {totalGifts >= 1000 && (
+                      <Button 
+                        onClick={() => setIsWithdrawalModalOpen(true)}
+                        className="w-full bg-gradient-to-r from-primary to-primary/90"
+                      >
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Withdraw KSH {Math.floor(totalGifts / 2).toLocaleString()}
+                      </Button>
+                    )}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </>
           )}
 
           {/* Actions */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            
             <Button 
               variant="outline" 
               className="h-12 bg-primary/5 hover:bg-primary/10 border-primary/20 hover:border-primary/40 text-primary hover:text-primary transition-all duration-200"
@@ -220,6 +308,16 @@ const Profile: React.FC = () => {
               <Edit className="h-5 w-5 mr-2" />
               Edit Profile
             </Button>
+            
+            {user.id !== 'admin' && totalGifts >= 1000 && (
+              <Button
+                className="h-12 bg-gradient-to-r from-primary to-primary/90"
+                onClick={() => setIsWithdrawalModalOpen(true)}
+              >
+                <Gift className="h-5 w-5 mr-2" />
+                Withdraw Gifts ({totalGifts})
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -227,6 +325,13 @@ const Profile: React.FC = () => {
       <EditProfileModal 
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
+      />
+
+      <GiftWithdrawalModal 
+        isOpen={isWithdrawalModalOpen}
+        onClose={() => setIsWithdrawalModalOpen(false)}
+        totalGifts={totalGifts}
+        userId={user.id}
       />
       
       <BottomNav />
