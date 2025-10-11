@@ -44,19 +44,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
     'QH51DEF34 Confirmed'
   ]));
 
-  const messagePackages: CreditPackage[] = [
+  const creditPackages: CreditPackage[] = [
     { credits: 25, price: 50, description: 'Starter package' },
     { credits: 50, price: 90, description: 'Most popular choice', savings: 'Save 10%' },
     { credits: 100, price: 160, description: 'Best value package', savings: 'Save 20%' },
     { credits: 200, price: 300, description: 'Premium package', savings: 'Save 25%' }
   ];
 
-  const videoPackages: CreditPackage[] = [
-    { credits: 1, price: 500, description: '1 hour session' },
-    { credits: 3, price: 1200, description: '1 hour each', savings: 'Save 20%' }
-  ];
-
-  const packages = type === 'message' ? messagePackages : videoPackages;
+  const packages = creditPackages;
 
   const handlePackageSelect = (pkg: CreditPackage) => {
     setSelectedPackage(pkg);
@@ -329,13 +324,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
                 <ArrowLeft className="h-4 w-4" />
               </Button>
             )}
-            {type === 'message' ? (
-              <MessageCircle className="h-5 w-5" />
-            ) : (
-              <Video className="h-5 w-5" />
-            )}
+            <CreditCard className="h-5 w-5" />
             {step === 'packages' 
-              ? (type === 'message' ? 'Message Credits' : 'Video Credits')
+              ? 'Buy Credits'
               : step === 'payment' 
                 ? 'Choose Payment Method'
                 : step === 'agent'
@@ -354,7 +345,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
             {step === 'packages' ? (
               <>
                 <div className="text-center text-muted-foreground px-2">
-                  <p>You don't have enough {type} credits.</p>
+                  <p>Purchase credits to unlock features</p>
                   <p>Choose a package to continue:</p>
                 </div>
 
@@ -369,7 +360,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
                         <div className="flex justify-between items-center gap-2">
                           <div className="flex-1">
                             <h3 className="font-semibold text-sm sm:text-base">
-                              {pkg.credits} {type === 'message' ? 'Messages' : 'Video Call' + (pkg.credits > 1 ? 's' : '')}
+                              {pkg.credits} Credits
                             </h3>
                             <p className="text-xs sm:text-sm text-muted-foreground">{pkg.description}</p>
                             {pkg.savings && (
@@ -380,9 +371,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
                           </div>
                           <div className="text-right flex-shrink-0">
                             <p className="font-bold text-base sm:text-lg">Ksh {pkg.price.toLocaleString()}</p>
-                            {type === 'message' && (
-                              <p className="text-xs text-muted-foreground">Ksh {(pkg.price / pkg.credits).toFixed(0)} per message</p>
-                            )}
+                            <p className="text-xs text-muted-foreground">Ksh {(pkg.price / pkg.credits).toFixed(0)} per credit</p>
                           </div>
                         </div>
                       </CardContent>

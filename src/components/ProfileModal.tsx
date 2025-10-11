@@ -27,8 +27,8 @@ interface ProfileModalProps {
 
 // Example gifting catalogue — you can load this from backend or admin panel
 const GIFT_CATALOG = [
-  { id: 'rose', name: 'Rose', emoji: '🌹', cost: 5, description: 'Send a sweet rose' },
-  { id: 'choco', name: 'Chocolate', emoji: '🍫', cost: 12, description: 'A tasty treat' },
+  { id: 'rose', name: 'Rose', emoji: '🌹', cost: 10, description: 'Send a sweet rose' },
+  { id: 'choco', name: 'Chocolate', emoji: '🍫', cost: 15, description: 'A tasty treat' },
   { id: 'spark', name: 'Spark', emoji: '✨', cost: 25, description: 'Show big appreciation' },
   { id: 'crown', name: 'Crown', emoji: '👑', cost: 50, description: 'VIP-level gift' },
   { id: 'rocket', name: 'Rocket', emoji: '🚀', cost: 100, description: 'Massive love boost' },
@@ -38,7 +38,7 @@ const GIFT_CATALOG = [
 ];
 
 const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose }) => {
-  const { user, updateCredits, updateVideoCredits, likedProfiles, toggleLikeProfile } = useAuth();
+  const { user, updateCredits, likedProfiles, toggleLikeProfile } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -72,14 +72,10 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose })
 
   const handleVideoCall = () => {
     if (!user) return;
-    if (user.videoCredits <= 0) {
-      setPaymentType('video');
-      setIsPaymentModalOpen(true);
-      return;
-    }
-    updateVideoCredits(-1);
-    toast({ title: 'Video Call Started', description: `Starting video call with ${profile.name}!` });
-    setTimeout(() => toast({ title: 'Video Call Ended', description: 'Thanks for using video chat!' }), 3000);
+    
+    // Always show payment modal for video calls
+    setPaymentType('video');
+    setIsPaymentModalOpen(true);
   };
 
   const handleLike = () => {
