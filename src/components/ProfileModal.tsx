@@ -31,7 +31,10 @@ const GIFT_CATALOG = [
   { id: 'choco', name: 'Chocolate', emoji: '🍫', cost: 12, description: 'A tasty treat' },
   { id: 'spark', name: 'Spark', emoji: '✨', cost: 25, description: 'Show big appreciation' },
   { id: 'crown', name: 'Crown', emoji: '👑', cost: 50, description: 'VIP-level gift' },
-  { id: 'rocket', name: 'Rocket', emoji: '🚀', cost: 100, description: 'Massive love boost' }
+  { id: 'rocket', name: 'Rocket', emoji: '🚀', cost: 100, description: 'Massive love boost' },
+  { id: 'heart', name: 'Heart', emoji: '❤️', cost: 150, description: 'Express true love' },
+  { id: 'plane', name: 'Plane', emoji: '✈️', cost: 200, description: 'Premium gift' },
+  { id: 'lion', name: 'Lion', emoji: '🦁', cost: 500, description: 'Ultimate VIP gift', isPremium: true }
 ];
 
 const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose }) => {
@@ -47,15 +50,15 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose })
   const [giftQuantity, setGiftQuantity] = useState(1);
   const [isSendingGift, setIsSendingGift] = useState(false);
 
-  if (!profile) return null;
-
-  const isLiked = profile ? likedProfiles.includes(profile.id) : false;
-
   // compute total cost for chosen gift
   const giftTotal = useMemo(() => {
     if (!selectedGift) return 0;
     return selectedGift.cost * Math.max(1, giftQuantity);
   }, [selectedGift, giftQuantity]);
+
+  if (!profile) return null;
+
+  const isLiked = profile ? likedProfiles.includes(profile.id) : false;
 
   // -----------------------
   // Action handlers (stubs + UX)
@@ -295,8 +298,8 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose })
               </div>
 
               {/* Gift Grid */}
-              <div className="px-4 pb-4 overflow-x-auto">
-                <div className="grid grid-flow-col auto-cols-[80px] sm:auto-cols-[100px] gap-3 sm:gap-4">
+              <div className="px-4 pb-4 overflow-x-auto pt-5">
+                <div className="grid grid-flow-col auto-cols-[65px] sm:auto-cols-[85px] gap-2 sm:gap-3">
                   {GIFT_CATALOG.map((gift) => (
                     <div 
                       key={gift.id} 
@@ -307,16 +310,33 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ profile, isOpen, onClose })
                           : 'hover:scale-105 hover:-translate-y-1'
                       }`}
                     >
-                      <div className={`aspect-square rounded-2xl p-3 flex flex-col items-center justify-center gap-2 bg-gradient-to-br ${
+                      <div className={`aspect-square rounded-xl p-2 flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br relative ${
                         selectedGift?.id === gift.id
-                          ? 'from-primary/20 to-primary/5 ring-2 ring-primary shadow-lg'
-                          : 'from-muted/50 to-muted/30 hover:from-primary/10 hover:to-primary/5'
+                          ? gift.isPremium 
+                            ? 'from-yellow-500/20 to-amber-500/10 ring-2 ring-yellow-500 shadow-lg'
+                            : 'from-primary/20 to-primary/5 ring-2 ring-primary shadow-lg'
+                          : gift.isPremium
+                            ? 'from-yellow-500/10 to-amber-500/5 hover:from-yellow-500/20 hover:to-amber-500/10'
+                            : 'from-muted/50 to-muted/30 hover:from-primary/10 hover:to-primary/5'
                       }`}>
-                        <div className="text-3xl transform group-hover:scale-110 transition-transform duration-300">
+                        {gift.isPremium && (
+                          <div className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-[9px] px-1.5 py-0.5 rounded-full text-white font-medium animate-pulse shadow-lg">
+                            VIP
+                          </div>
+                        )}
+                        <div className={`text-2xl transform group-hover:scale-110 transition-transform duration-300 ${
+                          gift.isPremium ? 'animate-pulse' : ''
+                        }`}>
                           {gift.emoji}
                         </div>
-                        <div className="text-sm font-medium text-center">{gift.name}</div>
-                        <div className="text-xs text-primary font-semibold">{gift.cost} 💎</div>
+                        <div className="text-[11px] font-medium text-center leading-tight">{gift.name}</div>
+                        <div className={`text-[10px] font-semibold ${
+                          gift.isPremium 
+                            ? 'bg-gradient-to-r from-yellow-600 to-amber-500 bg-clip-text text-transparent'
+                            : 'text-primary'
+                        }`}>
+                          {gift.cost} 💎
+                        </div>
                       </div>
                     </div>
                   ))}
