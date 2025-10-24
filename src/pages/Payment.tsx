@@ -4,60 +4,38 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Smartphone, CheckCircle, Clock, Phone, MessageCircle, Video } from 'lucide-react';
+import { useCredits } from '@/hooks/useCredits';
+import { ArrowLeft, Smartphone, CheckCircle, Clock, MessageCircle, Video, Phone } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import Header from '@/components/Layout/Header';
+import { payHeroService } from '@/lib/payhero-service';
+import { usePaymentPolling } from '@/hooks/usePaymentPolling';
 
-// TODO: Backend Integration - Replace with actual API types
-interface PaymentRequest {
-  id: string;
-  userId: string;
-  amount: number;
+interface PaymentDetails {
   phoneNumber: string;
-  packageType: 'message' | 'video' | 'premium';
-  packageDetails: {
-    credits: number;
-    description: string;
-  };
-  status: 'pending' | 'completed' | 'failed';
-  timestamp: string;
-  transactionId?: string;
-}
-
-interface ContactRequest {
-  id: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  phoneNumber: string;
-  packageType: string;
-  amount: number;
-  message: string;
-  timestamp: string;
-  status: 'pending' | 'contacted' | 'resolved';
+  paymentMethod: 'mpesa' | 'card';
 }
 
 const Payment: React.FC = () => {
-  const { user, updateCredits, updateVideoCredits } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   
-  // Payment state
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [processing, setProcessing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'requesting' | 'pending' | 'success' | 'failed'>('idle');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [showContactForm, setShowContactForm] = useState(false);
   const [contactMessage, setContactMessage] = useState('');
-  
+  const [currentPaymentRef, setCurrentPaymentRef] = useState<string | null>(null);
+
   // Get package details from URL params
   const packageType = searchParams.get('package') as 'message' | 'video' | 'premium' || 'message';
   const credits = parseInt(searchParams.get('credits') || '5');
   const amount = parseInt(searchParams.get('amount') || '250');
 
-  // Package definitions
   const packageDetails = {
     message: {
       icon: MessageCircle,
@@ -77,138 +55,158 @@ const Payment: React.FC = () => {
   };
 
   const currentPackage = packageDetails[packageType];
-
-  // TODO: Backend Integration - Replace with actual phone validation
-  const validatePhoneNumber = (phone: string): boolean => {
-    // Kenyan phone number format validation
-    const kenyaPhoneRegex = /^(\+?254|0)?[17]\d{8}$/;
-    return kenyaPhoneRegex.test(phone.replace(/\s/g, ''));
-  };
-
-  // TODO: Backend Integration - Replace with actual M-Pesa STK Push API
-  const initiateSTKPush = async (): Promise<boolean> => {
-    if (!validatePhoneNumber(phoneNumber)) {
+  
+  const { updateCredits, updating } = useCredits({
+    onError: (error) => {
       toast({
-        title: "Invalid Phone Number",
-        description: "Please enter a valid Kenyan phone number (e.g., 0712345678)",
+        title: "Credit Update Failed",
+        description: error,
         variant: "destructive"
       });
-      return false;
     }
+  });
 
-    setPaymentStatus('requesting');
-
-    // TODO: Backend Integration Point
-    // Replace this simulation with actual M-Pesa API call
-    /*
-    const paymentRequest: PaymentRequest = {
-      id: generateUniqueId(),
-      userId: user!.id,
-      amount,
-      phoneNumber: formatPhoneNumber(phoneNumber),
-      packageType,
-      packageDetails: {
-        credits,
-        description: currentPackage.description
-      },
-      status: 'pending',
-      timestamp: new Date().toISOString()
-    };
-
-    try {
-      const response = await fetch('/api/payments/stk-push', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify(paymentRequest)
-      });
-
-      if (!response.ok) {
-        throw new Error('Payment initiation failed');
-      }
-
-      const result = await response.json();
-      
-      // Store payment request in database for tracking
-      await storePaymentRequest(paymentRequest);
-      
-      // Start polling for payment status
-      pollPaymentStatus(result.checkoutRequestId);
-      
-    } catch (error) {
-      console.error('STK Push failed:', error);
-      setPaymentStatus('failed');
-      return false;
-    }
-    */
-
-    // Simulate STK push request
-    setTimeout(() => {
-      setPaymentStatus('pending');
-      toast({
-        title: "STK Push Sent",
-        description: `Check your phone ${phoneNumber} for M-Pesa payment prompt`,
-      });
-
-      // Simulate payment completion after 5 seconds
-      setTimeout(() => {
-        // TODO: Backend Integration - This should be handled by webhook from M-Pesa
-        simulatePaymentCompletion();
-      }, 5000);
-    }, 2000);
-
-    return true;
-  };
-
-  // TODO: Backend Integration - Replace with webhook handler
-  const simulatePaymentCompletion = () => {
-    const isSuccess = Math.random() > 0.2; // 80% success rate for demo
-
-    if (isSuccess) {
-      // TODO: Backend Integration - Update database with successful payment
-      /*
-      await updatePaymentStatus(paymentId, 'completed', {
-        transactionId: mpesaTransactionId,
-        receipt: mpesaReceipt
-      });
-      
-      await updateUserCredits(user.id, packageType, credits);
-      */
-
+  // Use the payment polling hook
+  usePaymentPolling(currentPaymentRef, {
+    onSuccess: async () => {
       setPaymentStatus('success');
       
-      // Update local credits (TODO: This should come from backend after payment confirmation)
-      if (packageType === 'message') {
-        updateCredits(credits);
-      } else if (packageType === 'video') {
-        updateVideoCredits(credits);
-      } else if (packageType === 'premium') {
-        updateCredits(credits);
-        updateVideoCredits(5);
+      // Update user's credit balance
+      const updated = await updateCredits(user.id, packageType, credits);
+      
+      if (updated) {
+        toast({
+          title: "Payment Successful",
+          description: "Your credits have been added to your account",
+        });
+        setTimeout(() => navigate('/'), 2000);
       }
-
-      toast({
-        title: "Payment Successful!",
-        description: `${currentPackage.description} has been added to your account`,
-      });
-
-      // Redirect after success
-      setTimeout(() => {
-        navigate('/');
-      }, 3000);
-    } else {
+    },
+    onError: (error) => {
       setPaymentStatus('failed');
       toast({
         title: "Payment Failed",
-        description: "Payment was cancelled or failed. Please try again or contact support.",
+        description: error || "The payment was not completed. Please try again.",
+        variant: "destructive"
+      });
+    },
+    onTimeout: () => {
+      setPaymentStatus('failed');
+      toast({
+        title: "Payment Timeout",
+        description: "The payment process took too long. Please try again or contact support.",
         variant: "destructive"
       });
     }
+  });
+
+  const handlePayment = async (): Promise<void> => {
+    if (!phoneNumber) {
+      toast({
+        title: "Phone Number Required",
+        description: "Please enter your M-Pesa phone number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setProcessing(true);
+    setPaymentStatus('requesting');
+    setCurrentPaymentRef(null);
+
+    try {
+      console.log('Initiating payment with details:', {
+        amount,
+        phoneNumber,
+        customerName: user.name,
+        package: packageType
+      });
+
+      const paymentReference = `${user.id}-${Date.now()}`;
+      
+      // Initiate PayHero STK Push
+      const response = await payHeroService.initiateSTKPush({
+        amount: amount,
+        currency: "KES",
+        customerName: user.name,
+        phoneNumber: phoneNumber,
+        provider: "MPESA",
+        reference: paymentReference
+      });
+
+      if (!response.success) {
+        setPaymentStatus('failed');
+        toast({
+          title: "Payment Failed",
+          description: response.error?.message || "Failed to initiate payment",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setPaymentStatus('pending');
+      setCurrentPaymentRef(response.reference);
+      toast({
+        title: "Payment Initiated",
+        description: "Please check your phone for the M-PESA prompt",
+      });
+
+    } catch (error) {
+      console.error('Payment Error:', error);
+      setPaymentStatus('failed');
+      toast({
+        title: "Payment Failed",
+        description: error instanceof Error ? error.message : "There was an error processing your payment. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+            // Log detailed error information
+            console.error('Payment Status Check Error:', {
+              error: error instanceof Error ? {
+                message: error.message,
+                stack: error.stack
+              } : error,
+              timestamp: new Date().toISOString(),
+              checkNumber: checkCount,
+              paymentDetails: {
+                userId: user.id,
+                phoneNumber,
+                amount,
+                packageType,
+                credits,
+                reference: response.reference
+              }
+            });
+            setPaymentStatus('failed');
+          }
+        };
+
+        // Start checking payment status
+        setTimeout(checkStatus, 5000); // Start checking after 5 seconds
+      } else {
+        setPaymentStatus('failed');
+        toast({
+          title: "Payment Failed",
+          description: response.error?.message || "Failed to initiate payment",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Payment Error:', error);
+      setPaymentStatus('failed');
+      toast({
+        title: "Payment Failed",
+        description: error instanceof Error ? error.message : "There was an error processing your payment. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setProcessing(false);
+    }
   };
 
-  // TODO: Backend Integration - Submit contact request to admin
   const submitContactRequest = async () => {
     if (!contactMessage.trim()) {
       toast({
@@ -219,53 +217,13 @@ const Payment: React.FC = () => {
       return;
     }
 
-    // TODO: Backend Integration Point
-    /*
-    const contactRequest: ContactRequest = {
-      id: generateUniqueId(),
-      userId: user!.id,
-      userName: user!.name,
-      userEmail: user!.email,
-      phoneNumber,
-      packageType: currentPackage.title,
-      amount,
-      message: contactMessage,
-      timestamp: new Date().toISOString(),
-      status: 'pending'
-    };
-
-    try {
-      await fetch('/api/admin/contact-requests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify(contactRequest)
-      });
-
-      // Send notification to admin dashboard
-      await notifyAdminNewContactRequest(contactRequest);
-      
-    } catch (error) {
-      console.error('Contact request failed:', error);
-      toast({
-        title: "Submission Failed",
-        description: "Please try again or contact support directly",
-        variant: "destructive"
-      });
-      return;
-    }
-    */
-
-    // Simulate successful submission
     toast({
       title: "Request Submitted",
       description: "Our support team will contact you within 24 hours to process your payment",
     });
 
-    // TODO: Backend Integration - Store in database and notify admin
-    console.log('Contact Request (TODO: Send to backend):', {
+    // Log contact request (TODO: implement backend integration)
+    console.log('Contact Request:', {
       userId: user?.id,
       userName: user?.name,
       userEmail: user?.email,
@@ -294,7 +252,7 @@ const Payment: React.FC = () => {
         <div className="mb-6">
           <Button
             variant="ghost"
-            onClick={() => navigate('/admin-help')}
+            onClick={() => navigate('/')}
             className="flex items-center space-x-2"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -352,11 +310,18 @@ const Payment: React.FC = () => {
                     </p>
                   </div>
                   <Button 
-                    onClick={initiateSTKPush}
+                    onClick={handlePayment}
                     className="w-full bg-green-600 hover:bg-green-700"
-                    disabled={!phoneNumber}
+                    disabled={!phoneNumber || processing}
                   >
-                    Pay Ksh {amount.toLocaleString()} via M-Pesa
+                    {processing ? (
+                      <>
+                        <Clock className="h-4 w-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      `Pay Ksh ${amount.toLocaleString()} via M-Pesa`
+                    )}
                   </Button>
                 </>
               )}
@@ -370,13 +335,15 @@ const Payment: React.FC = () => {
 
               {paymentStatus === 'pending' && (
                 <div className="text-center py-4">
-                  <Smartphone className="h-8 w-8 mx-auto mb-2 text-green-600" />
-                  <p className="font-semibold">STK Push Sent!</p>
+                  <div className="flex items-center justify-center mb-4">
+                    <Clock className="h-8 w-8 animate-spin text-primary" />
+                  </div>
+                  <p className="font-semibold">Payment in Progress</p>
                   <p className="text-sm text-muted-foreground">
-                    Check your phone {phoneNumber} for M-Pesa payment prompt
+                    Please complete the payment on your phone {phoneNumber}
                   </p>
                   <p className="text-sm text-muted-foreground mt-2">
-                    Complete the payment to receive your credits
+                    Do not close this page. Waiting for confirmation...
                   </p>
                 </div>
               )}
@@ -387,6 +354,9 @@ const Payment: React.FC = () => {
                   <p className="font-semibold text-green-600">Payment Successful!</p>
                   <p className="text-sm text-muted-foreground">
                     Credits have been added to your account
+                  </p>
+                  <p className="text-sm text-primary mt-4">
+                    Redirecting to home page...
                   </p>
                 </div>
               )}
@@ -452,12 +422,12 @@ const Payment: React.FC = () => {
                   
                   <div className="space-y-2">
                     <Label htmlFor="message">Message to Agent</Label>
-                    <Textarea
+                    <textarea
                       id="message"
+                      className="w-full min-h-[100px] p-2 border rounded"
                       placeholder="Please describe your payment issue or preferred payment method..."
                       value={contactMessage}
                       onChange={(e) => setContactMessage(e.target.value)}
-                      rows={4}
                     />
                   </div>
 
@@ -502,22 +472,21 @@ const Payment: React.FC = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm">
-              <p><strong>M-Pesa STK Push:</strong></p>
+              <p><strong>M-Pesa Payment Steps:</strong></p>
               <ul className="list-disc pl-6 space-y-1">
-                <li>Enter your M-Pesa registered phone number</li>
-                <li>Click "Pay via M-Pesa" button</li>
-                <li>Check your phone for M-Pesa payment prompt</li>
-                <li>Enter your M-Pesa PIN to complete payment</li>
-                <li>Credits will be added automatically upon successful payment</li>
+                <li>Enter your M-Pesa number (must be registered with M-Pesa)</li>
+                <li>You will receive an M-Pesa prompt on your phone</li>
+                <li>Enter your M-Pesa PIN to authorize the payment</li>
+                <li>Wait for confirmation on this page</li>
               </ul>
               
-              <p className="mt-4"><strong>Contact Agent:</strong></p>
-              <ul className="list-disc pl-6 space-y-1">
-                <li>Use this option if M-Pesa payment fails</li>
-                <li>Our agent will contact you within 24 hours</li>
-                <li>Alternative payment methods available (Bank transfer, etc.)</li>
-                <li>Manual credit addition after payment verification</li>
-              </ul>
+              <div className="mt-4 p-3 bg-muted rounded-lg">
+                <p className="text-sm font-medium">Having trouble?</p>
+                <p className="text-sm text-muted-foreground">
+                  If you don't receive the M-Pesa prompt or encounter any issues, 
+                  use the "Contact Agent" option below for assistance.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>

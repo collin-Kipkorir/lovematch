@@ -1,0 +1,46 @@
+{
+  "name": "LoveMatch Kenya",
+  "short_name": "LoveMatch",
+  "description": "Kenya's Premier Dating App",
+  "start_url": ".",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#FF4B91",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "48x48",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "opengraph-image.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "opengraph-image.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "View Matches",
+      "short_name": "Matches",
+      "description": "View your matches",
+      "url": "/matches",
+      "icons": [{ "src": "/icons/matches.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Open Chat",
+      "short_name": "Chat",
+      "description": "Go to chat messages",
+      "url": "/chat",
+      "icons": [{ "src": "/icons/chat.png", "sizes": "192x192" }]
+    }
+  ]
+}

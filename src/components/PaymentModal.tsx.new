@@ -1,0 +1,541 @@
+import React, { useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
+import { database } from '@/lib/firebase';
+import { ref, get, push, set, onValue } from 'firebase/database';
+import { MessageCircle, Video, Phone, ArrowLeft, Receipt, Clock, AlertCircle, Copy, CreditCard, Smartphone, CheckCircle } from 'lucide-react';
+
+interface PaymentModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  type?: 'message' | 'video';
+}
+
+interface CreditPackage {
+  credits: number;
+  price: number;
+  description: string;
+  savings?: string;
+}
+
+const creditPackages: CreditPackage[] = [
+  { credits: 25, price: 50, description: 'Starter package' },
+  { credits: 50, price: 90, description: 'Most popular', savings: 'Save 10%' },
+  { credits: 100, price: 160, description: 'Best value', savings: 'Save 20%' },
+  { credits: 200, price: 300, description: 'Premium package', savings: 'Save 25%' },
+  { credits: 500, price: 700, description: 'Pro package', savings: 'Save 30%' },
+  { credits: 1000, price: 1200, description: 'Ultimate package', savings: 'Save 40%' }
+];
+
+const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'message' }) => {
+  const { toast } = useToast();
+  const { user, updateCredits, updateVideoCredits } = useAuth();
+  
+  // Modal state
+  const [step, setStep] = useState<'packages' | 'payment' | 'agent' | 'stk-push'>('packages');
+  const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [stkStatus, setStkStatus] = useState<'idle' | 'processing' | 'failed' | 'success'>('idle');
+
+  const handlePackageSelect = (pkg: CreditPackage) => {
+    setSelectedPackage(pkg);
+    setStep('payment');
+  };
+
+  const handleStkPush = () => {
+    setStep('stk-push');
+  };
+
+  const handleContactAgent = () => {
+    setStep('agent');
+  };
+
+  const resetModal = () => {
+    setStep('packages');
+    setSelectedPackage(null);
+    setPhoneNumber('');
+    setIsProcessing(false);
+    setStkStatus('idle');
+  };
+
+  const handleClose = () => {
+    onClose();
+    resetModal();
+  };
+
+  const initiateSTKPush = async () => {
+    if (!phoneNumber || !selectedPackage) return;
+
+    // Basic phone number validation
+    const phoneRegex = /^(?:254|\+254|0)?(7\d{8})$/;
+    const match = phoneNumber.match(phoneRegex);
+    
+    if (!match) {
+      toast({
+        title: "Invalid Phone Number",
+        description: "Please enter a valid Safaricom number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const formattedPhone = '254' + match[1];
+    setIsProcessing(true);
+    setStkStatus('processing');
+
+    // Create an abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+    try {
+      if (!user) {
+        toast({
+          title: "Authentication Required",
+          description: "Please log in to make a payment",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // First, create a payment record in Firebase
+      const paymentRef = push(ref(database, 'stkPushRequests'));
+      const paymentId = paymentRef.key;
+      
+      if (!paymentId) {
+        throw new Error('Failed to create payment record');
+      }
+
+      // Store the initial request details
+      await set(paymentRef, {
+        userId: user.id,
+        phoneNumber: formattedPhone,
+        amount: selectedPackage.price,
+        status: 'pending',
+        package: {
+          credits: selectedPackage.credits,
+          type: type
+        },
+        timestamp: new Date().toISOString(),
+        verificationId: paymentId,
+        environment: import.meta.env.MODE
+      });
+
+      // Get the base URL using the project ID from firebase config
+      const baseUrl = `https://us-central1-lovematch-e5642.cloudfunctions.net`;
+      
+      // Get current user session from localStorage
+      const userSession = localStorage.getItem('user');
+      
+      if (!userSession) {
+        toast({
+          title: "Session Expired",
+          description: "Please log in again to continue",
+          variant: "destructive"
+        });
+        throw new Error('Authentication required. Please log in again.');
+      }
+
+      // Parse user session and create auth header
+      const sessionData = JSON.parse(userSession);
+      const authHeader = btoa(`${sessionData.id}:${sessionData.email}`);
+
+      const response = await fetch(`${baseUrl}/stkPush`, {
+        mode: 'cors',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${authHeader}`,
+        },
+        body: JSON.stringify({
+          phoneNumber: formattedPhone,
+          amount: selectedPackage.price,
+          accountReference: paymentId,
+          transactionDesc: `${type} Credits Purchase`
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      let responseData;
+      // Handle specific HTTP error codes
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        switch (response.status) {
+          case 400:
+            throw new Error(errorData.message || 'Invalid phone number or amount. Please check your details.');
+          case 401:
+            throw new Error(errorData.message || 'Authentication failed. Please log in again.');
+          case 403:
+            throw new Error(errorData.message || 'You are not authorized to make this payment.');
+          case 404:
+            throw new Error('Payment service is currently unavailable.');
+          case 429:
+            throw new Error('Too many payment attempts. Please try again later.');
+          case 500:
+            throw new Error(errorData.message || 'Payment service error. Please try again later.');
+          default:
+            throw new Error(errorData.message || 'Failed to initiate STK push');
+        }
+      }
+
+      responseData = await response.json();
+      
+      if (!responseData.CheckoutRequestID || !responseData.MerchantRequestID) {
+        throw new Error('Invalid response from payment service');
+      }
+
+      const data = responseData;
+
+      // Update the payment record with the transaction details
+      await set(ref(database, `stkPushRequests/${paymentId}`), {
+        ...data,
+        lastUpdated: new Date().toISOString()
+      });
+        
+      // Listen for status updates
+      const statusRef = ref(database, `stkPushRequests/${paymentId}/status`);
+      const unsubscribe = onValue(statusRef, async (snapshot) => {
+        const status = snapshot.val();
+        
+        if (status === 'completed') {
+          setStkStatus('success');
+          await handleSuccessfulPayment();
+          unsubscribe();
+        } else if (status === 'failed') {
+          setStkStatus('failed');
+          toast({
+            title: "Payment Failed",
+            description: "The payment was not completed. Please try again.",
+            variant: "destructive"
+          });
+          unsubscribe();
+        }
+      });
+
+      // Start checking for timeout after 2 minutes
+      setTimeout(() => {
+        unsubscribe();
+        if (stkStatus === 'processing') {
+          setStkStatus('failed');
+          set(ref(database, `stkPushRequests/${paymentId}`), {
+            status: 'timeout',
+            lastUpdated: new Date().toISOString(),
+            error: 'Payment request timed out'
+          });
+          toast({
+            title: "Payment Timeout",
+            description: "The payment request has expired. Please try again.",
+            variant: "destructive"
+          });
+        }
+      }, 120000); // 2 minutes timeout
+
+    } catch (error: any) {
+      console.error('STK Push error:', error);
+      setStkStatus('failed');
+
+      // Cleanup
+      clearTimeout(timeoutId);
+      
+      // Update payment record with error
+      if (paymentId) {
+        await set(ref(database, `stkPushRequests/${paymentId}`), {
+          status: 'failed',
+          error: error.message || 'Unknown error occurred',
+          lastUpdated: new Date().toISOString()
+        }).catch(console.error);
+      }
+
+      // Show appropriate error message
+      toast({
+        title: "Payment Failed",
+        description: error.message || "Failed to initiate payment. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSuccessfulPayment = async () => {
+    if (!user || !selectedPackage) {
+      console.error('Missing user or package data');
+      toast({
+        title: "System Error",
+        description: "Critical data missing. Please contact support.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      // Update user's credits based on package type
+      if (type === 'video') {
+        await updateVideoCredits(selectedPackage.credits);
+      } else {
+        await updateCredits(selectedPackage.credits);
+      }
+
+      // Log the payment transaction
+      const transactionRef = push(ref(database, 'paymentTransactions'));
+      
+      if (!transactionRef.key) {
+        throw new Error('Failed to create transaction record');
+      }
+
+      const transactionData = {
+        userId: user.id,
+        packageType: type,
+        credits: selectedPackage.credits,
+        amount: selectedPackage.price,
+        paymentMethod: 'mpesa-stk',
+        status: 'completed',
+        timestamp: new Date().toISOString(),
+        transactionId: transactionRef.key
+      };
+
+      await set(transactionRef, transactionData);
+
+      toast({
+        title: "Payment Successful!",
+        description: `${selectedPackage.credits} credits have been added to your account`,
+      });
+      onClose();
+      resetModal();
+    } catch (error: any) {
+      console.error('Error processing payment:', error);
+      
+      // Log the failed transaction
+      const errorTransactionRef = push(ref(database, 'failedTransactions'));
+      await set(errorTransactionRef, {
+        userId: user.id,
+        packageType: type,
+        credits: selectedPackage.credits,
+        amount: selectedPackage.price,
+        paymentMethod: 'mpesa-stk',
+        status: 'failed',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }).catch(console.error);
+
+      toast({
+        title: "Error Processing Payment",
+        description: "There was an error adding credits. Our team has been notified and will assist you shortly.",
+        variant: "destructive"
+      });
+      throw error;
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md h-[90vh] flex flex-col gap-0 p-0">
+        <DialogHeader className="p-6 pb-0">
+          <DialogTitle>Purchase Credits</DialogTitle>
+        </DialogHeader>
+
+        <ScrollArea className="flex-grow px-6">
+          <div className="space-y-4 py-4">
+            {step === 'packages' && (
+              <div className="grid gap-4">
+                {creditPackages.map((pkg, index) => (
+                  <Card 
+                    key={index} 
+                    className={`cursor-pointer transition-all hover:border-primary ${
+                      selectedPackage === pkg ? 'border-primary' : ''
+                    }`}
+                    onClick={() => handlePackageSelect(pkg)}
+                  >
+                    <CardContent className="flex justify-between items-center p-4">
+                      <div>
+                        <h3 className="font-semibold">{pkg.credits} Credits</h3>
+                        <p className="text-sm text-muted-foreground">{pkg.description}</p>
+                        {pkg.savings && (
+                          <span className="text-xs text-green-600">{pkg.savings}</span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">KSH {pkg.price}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {step === 'payment' && selectedPackage && (
+              <div className="space-y-6">
+                <div className="text-center space-y-2">
+                  <h3 className="font-semibold text-lg">
+                    {selectedPackage.credits} Credits
+                  </h3>
+                  <p className="text-2xl font-bold">
+                    KSH {selectedPackage.price}
+                  </p>
+                </div>
+
+                <div className="grid gap-4">
+                  <Button
+                    onClick={handleStkPush}
+                    className="w-full h-auto py-4 gap-3"
+                  >
+                    <Smartphone className="h-5 w-5" />
+                    <div className="text-left">
+                      <p className="font-semibold">Pay with M-Pesa</p>
+                      <p className="text-xs opacity-90">
+                        Get credits instantly via STK push
+                      </p>
+                    </div>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={handleContactAgent}
+                    className="w-full h-auto py-4 gap-3"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    <div className="text-left">
+                      <p className="font-semibold">Contact Agent</p>
+                      <p className="text-xs opacity-90">
+                        Chat with an agent for assistance
+                      </p>
+                    </div>
+                  </Button>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  onClick={() => setStep('packages')}
+                  className="w-full"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Change Package
+                </Button>
+              </div>
+            )}
+
+            {step === 'stk-push' && selectedPackage && (
+              <>
+                {stkStatus === 'idle' && (
+                  <div className="space-y-6">
+                    <div className="text-center space-y-2">
+                      <p className="text-sm text-muted-foreground">Amount to Pay</p>
+                      <p className="text-2xl font-bold">KSH {selectedPackage.price}</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">M-Pesa Phone Number</Label>
+                        <Input
+                          id="phone"
+                          placeholder="07XX XXX XXX"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                        />
+                      </div>
+
+                      <Button
+                        onClick={initiateSTKPush}
+                        disabled={isProcessing || !phoneNumber}
+                        className="w-full"
+                      >
+                        {isProcessing ? (
+                          <>Processing...</>
+                        ) : (
+                          <>Pay Now</>
+                        )}
+                      </Button>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      onClick={() => setStep('payment')}
+                      className="w-full"
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back
+                    </Button>
+                  </div>
+                )}
+
+                {stkStatus === 'processing' && (
+                  <div className="text-center py-6 space-y-4">
+                    <Clock className="h-12 w-12 mx-auto text-blue-600 animate-pulse" />
+                    <div>
+                      <p className="font-semibold">Check your phone</p>
+                      <p className="text-sm text-muted-foreground">
+                        Enter M-Pesa PIN to complete payment
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {stkStatus === 'success' && (
+                  <div className="text-center py-6 space-y-4">
+                    <CheckCircle className="h-12 w-12 mx-auto text-green-600" />
+                    <div>
+                      <p className="font-semibold text-green-600">Payment Successful!</p>
+                      <p className="text-sm text-muted-foreground">
+                        Credits have been added to your account
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={handleClose}
+                      className="w-full"
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                )}
+
+                {stkStatus === 'failed' && (
+                  <div className="text-center py-6 space-y-4">
+                    <AlertCircle className="h-12 w-12 mx-auto text-red-600" />
+                    <div>
+                      <p className="font-semibold text-red-600">Payment Failed</p>
+                      <p className="text-sm text-muted-foreground">
+                        Payment request was cancelled or failed
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => setStkStatus('idle')}
+                      className="w-full"
+                    >
+                      Try Again
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </ScrollArea>
+
+        <div className="flex-shrink-0 space-y-4 pt-4 border-t">
+          <div className="flex items-center justify-center gap-2 text-muted-foreground text-xs sm:text-sm">
+            <CreditCard className="h-4 w-4" />
+            <span>Secure payment via M-Pesa or agent contact</span>
+          </div>
+
+          <Button variant="outline" onClick={handleClose} className="w-full">
+            Cancel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default PaymentModal;

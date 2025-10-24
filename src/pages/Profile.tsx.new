@@ -1,0 +1,224 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '@/context/AuthContext';
+import Header from '@/components/Layout/Header';
+import BottomNav from '@/components/Navigation/BottomNav';
+import EditProfileModal from '@/components/EditProfileModal';
+import GiftWithdrawalModal from '@/components/GiftWithdrawalModal';
+import WithdrawalHistoryModal from '@/components/WithdrawalHistoryModal';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { MapPin, Heart, MessageCircle, Settings, Edit, Gift, CreditCard, History } from 'lucide-react';
+import { database } from '@/lib/firebase';
+import { ref, query, orderByChild, equalTo, onValue, off } from 'firebase/database';
+
+interface UserGift {
+  type?: string;
+  amount?: number;
+  cost?: number;
+  quantity?: number;
+  name?: string;
+  emoji?: string;
+  timestamp?: string;
+  toUserId?: string;
+}
+
+const Profile: React.FC = () => {
+  const { user } = useAuth();
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isWithdrawalModalOpen, setIsWithdrawalModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [totalGifts, setTotalGifts] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('[Profile] Setting up gift listener for user:', user.id);
+
+    const giftsRef = ref(database, 'userGifts');
+    const userGiftsQuery = query(giftsRef, orderByChild('toUserId'), equalTo(user.id));
+
+    const calculateGiftBalance = (gifts: Record<string, UserGift>) => {
+      let total = 0;
+      
+      Object.entries(gifts).forEach(([key, gift]) => {
+        if (!gift) return;
+        
+        // Skip withdrawal records
+        if (gift.type === 'withdrawal') {
+          console.log('[Profile] Skipping withdrawal:', key);
+          return;
+        }
+
+        // Only count gifts with valid cost and quantity
+        const cost = Number(gift.cost);
+        const quantity = Number(gift.quantity);
+        
+        if (!isNaN(cost) && !isNaN(quantity) && cost > 0 && quantity > 0) {
+          const value = cost * quantity;
+          console.log(`[Profile] Adding gift: ${gift.name} (${gift.emoji}) value=${value}`);
+          total += value;
+        } else {
+          console.log('[Profile] Invalid gift data:', gift);
+        }
+      });
+
+      console.log(`[Profile] Final balance: ${total}`);
+      return total;
+    };
+
+    const giftListener = onValue(userGiftsQuery, (snapshot) => {
+      try {
+        const data = snapshot.val();
+        console.log('[Profile] Received gift data:', data);
+
+        if (!data) {
+          console.log('[Profile] No gifts found');
+          setTotalGifts(0);
+          return;
+        }
+
+        const balance = calculateGiftBalance(data);
+        setTotalGifts(balance);
+      } catch (error) {
+        console.error('[Profile] Error processing gifts:', error);
+        setTotalGifts(0);
+      }
+    });
+
+    return () => {
+      console.log('[Profile] Cleaning up gift listener');
+      off(userGiftsQuery);
+    };
+  }, [user?.id]);
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <h2 className="text-2xl font-semibold">Loading Profile...</h2>
+          <p className="text-muted-foreground">Please wait while we fetch your information</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      
+      <main className="container max-w-lg mx-auto p-4 space-y-6">
+        <Card>
+          <CardHeader className="relative pb-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-xl">{user.name}</CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  <MapPin className="h-3.5 w-3.5 inline-block mr-1" />
+                  {user.location || 'Location not set'}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsEditModalOpen(true)}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Badge variant="secondary">
+                    <Heart className="h-3.5 w-3.5 mr-1" />
+                    {user.matches || 0} Matches
+                  </Badge>
+                  <Badge variant="secondary">
+                    <MessageCircle className="h-3.5 w-3.5 mr-1" />
+                    {user.responseRate || '0%'} Response
+                  </Badge>
+                </div>
+                <Button variant="ghost" size="icon">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div>
+                <h3 className="font-medium mb-2">About Me</h3>
+                <p className="text-sm text-muted-foreground">
+                  {user.bio || 'No bio added yet'}
+                </p>
+              </div>
+
+              {totalGifts > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="p-4 bg-gradient-to-r from-primary/10 to-primary/5 rounded-lg border border-primary/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        <Gift className="h-3.5 w-3.5 text-primary" />
+                        <span className="text-sm font-medium">Gift Balance</span>
+                      </div>
+                      <span className="font-bold text-primary text-lg">{totalGifts}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="text-muted-foreground">Earnings:</span>
+                      <span className="font-semibold text-primary">
+                        KSH {Math.floor(totalGifts / 2).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      {totalGifts >= 1000 && (
+                        <Button 
+                          onClick={() => setIsWithdrawalModalOpen(true)}
+                          className="w-full bg-gradient-to-r from-primary to-primary/90 text-primary-foreground hover:from-primary/90 hover:to-primary/80"
+                        >
+                          <CreditCard className="h-4 w-4 mr-2" />
+                          Withdraw KSH {Math.floor(totalGifts / 2).toLocaleString()}
+                        </Button>
+                      )}
+                      
+                      <Button
+                        onClick={() => setIsHistoryModalOpen(true)}
+                        className="w-full"
+                        variant="outline"
+                      >
+                        <History className="h-4 w-4 mr-2" />
+                        Withdrawal History
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </main>
+
+      <BottomNav />
+
+      <EditProfileModal 
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+      />
+
+      <GiftWithdrawalModal
+        isOpen={isWithdrawalModalOpen}
+        onClose={() => setIsWithdrawalModalOpen(false)}
+        totalGifts={totalGifts}
+        userId={user.id}
+      />
+
+      <WithdrawalHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+      />
+    </div>
+  );
+};
+
+export default Profile;

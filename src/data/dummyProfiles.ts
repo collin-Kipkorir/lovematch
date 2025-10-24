@@ -1,4 +1,4 @@
-export interface Profile {
+export interface DummyProfile {
   id: string;
   name: string;
   age: number;
@@ -8,6 +8,11 @@ export interface Profile {
   interests: string[];
   avatar: string;
   profilePicture?: string;
+}
+
+// Use Profile type from useProfiles but make avatar required
+export interface Profile extends Omit<import('../hooks/useProfiles').Profile, 'avatar'> {
+  avatar: string;
 }
 
 export const dummyProfiles: Profile[] = [

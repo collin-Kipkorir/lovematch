@@ -1,0 +1,22 @@
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
+import { database } from '@/lib/firebase';
+import { ref, get, push, set, update, onValue } from 'firebase/database';
+import { payHeroService } from '@/lib/services/payhero';
+import { MessageCircle, Video, Phone, ArrowLeft, Receipt, Clock, AlertCircle, Copy, CreditCard, Smartphone, CheckCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from "@/lib/utils";

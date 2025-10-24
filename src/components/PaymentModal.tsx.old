@@ -1,0 +1,1081 @@
+'use client';
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
+import { database } from '@/lib/firebase';
+import { ref, get, push, set, update, onValue } from 'firebase/database';
+import { payHeroService } from '@/lib/services/payhero';
+import { MessageCircle, Video, Phone, ArrowLeft, Receipt, Clock, AlertCircle, Copy, CreditCard, Smartphone, CheckCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from "@/lib/utils";
+
+interface PaymentModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  type?: 'message' | 'video';
+}
+
+interface CreditPackage {
+  credits: number;
+  price: number;
+  description: string;
+  savings?: string;
+}
+
+const creditPackages: CreditPackage[] = [
+  { credits: 25, price: 1, description: 'Starter package' },
+  { credits: 50, price: 2, description: 'Most popular', savings: 'Save 10%' },
+  { credits: 100, price: 160, description: 'Best value', savings: 'Save 20%' },
+  { credits: 200, price: 300, description: 'Premium package', savings: 'Save 25%' },
+  { credits: 500, price: 700, description: 'Pro package', savings: 'Save 30%' },
+  { credits: 1000, price: 1200, description: 'Ultimate package', savings: 'Save 40%' }
+];
+
+const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'message' }) => {
+  const { toast } = useToast();
+  const { user, updateCredits, updateVideoCredits } = useAuth();
+  
+  // Modal state
+  const [step, setStep] = useState<'packages' | 'payment' | 'agent' | 'stk-push' | 'success'>('packages');
+  const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [isTestMode] = useState(import.meta.env.MODE === 'development');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [stkStatus, setStkStatus] = useState<'idle' | 'processing' | 'failed' | 'success'>('idle');
+  const [currentPaymentId, setCurrentPaymentId] = useState<string | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+  
+  // Handlers for payment processing
+  const handleSuccessfulPayment = useCallback(async (creditsToAdd: number) => {
+    if (!user?.uid) return;
+    
+    try {
+      const userCreditsRef = ref(database, `users/${user.uid}/credits`);
+      const currentCredits = await get(userCreditsRef);
+      const newCredits = (currentCredits.val() || 0) + creditsToAdd;
+      
+      await update(ref(database, `users/${user.uid}`), {
+        credits: newCredits,
+        lastPurchase: new Date().toISOString()
+      });
+
+      // Update local credit state
+      updateCredits(newCredits);
+
+      // Show success message
+      toast({
+        title: "Payment Successful",
+        description: `${creditsToAdd} credits have been added to your account!`,
+        variant: "default"
+      });
+    } catch (error) {
+      console.error('Error updating credits:', error);
+      toast({
+        title: "Error",
+        description: "There was an error updating your credits. Please contact support.",
+        variant: "destructive"
+      });
+    }
+  }, [user?.uid, updateCredits, toast]);
+
+  const handlePaymentStatusUpdate = useCallback((paymentData: any) => {
+    if (!paymentData?.status) return;
+
+    console.log('Payment status update:', paymentData.status);
+    toast.dismiss();
+
+    switch (paymentData.status) {
+      case 'success':
+      case 'completed':
+        setStkStatus('success');
+        setStep('success');
+        if (selectedPackage) {
+          void handleSuccessfulPayment(selectedPackage.credits);
+        }
+        break;
+
+      case 'failed':
+        setStkStatus('failed');
+        toast({
+          title: "Payment Failed",
+          description: paymentData.error || "The payment could not be processed. Please try again.",
+          variant: "destructive"
+        });
+        break;
+
+      case 'timeout':
+        setStkStatus('failed');
+        toast({
+          title: "Payment Timeout",
+          description: "The payment request has expired. Please try again.",
+          variant: "destructive"
+        });
+        break;
+
+      default:
+        // Keep monitoring
+        break;
+    }
+  }, [selectedPackage, handleSuccessfulPayment, toast, setStkStatus, setStep]);
+
+  // Reset state and cleanup
+  const resetState = useCallback(() => {
+    toast.dismiss();
+    setStep('packages');
+    setStkStatus('idle');
+    setCurrentPaymentId(null);
+    setPhoneNumber('');
+    setSelectedPackage(null);
+    setIsProcessing(false);
+  }, [toast]);
+  
+  // Reset state and cleanup when modal closes
+  const resetState = () => {
+    toast.dismiss();
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+    setStep('packages');
+    setStkStatus('idle');
+    setCurrentPaymentId(null);
+    setPhoneNumber('');
+    setSelectedPackage(null);
+    setIsProcessing(false);
+  };
+
+  // Cleanup on unmount or modal close
+  useEffect(() => {
+    if (!isOpen) {
+      resetState();
+    }
+    return () => {
+      resetState();
+    };
+  }, [isOpen]);
+
+  // Close modal handler with cleanup
+  const handleClose = () => {
+    toast.dismiss();
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+    onClose();
+  };
+  
+  // Handler for payment status updates
+  // Handler for payment status updates
+  const handlePaymentStatusUpdate = useCallback((paymentData: any) => {
+    if (!paymentData?.status) return;
+
+    console.log('Payment status update:', paymentData.status);
+    toast.dismiss();
+
+    switch (paymentData.status) {
+      case 'success':
+      case 'completed':
+        setStkStatus('success');
+        setStep('success');
+        if (selectedPackage) {
+          void handleSuccessfulPayment(selectedPackage.credits);
+        }
+        break;
+
+      case 'failed':
+        setStkStatus('failed');
+        toast({
+          title: "Payment Failed",
+          description: paymentData.error || "The payment could not be processed. Please try again.",
+          variant: "destructive"
+        });
+        break;
+
+      case 'timeout':
+        setStkStatus('failed');
+        toast({
+          title: "Payment Timeout",
+          description: "The payment request has expired. Please try again.",
+          variant: "destructive"
+        });
+        break;
+
+      default:
+        // Keep monitoring
+        break;
+    }
+  }, [selectedPackage, handleSuccessfulPayment, toast]);
+
+  // Handler for payment status updates
+  const handlePaymentStatusUpdate = (paymentData: any) => {
+    if (!paymentData?.status) return;
+
+    console.log('Payment status update:', paymentData.status);
+    toast.dismiss();
+
+    switch (paymentData.status) {
+      case 'success':
+      case 'completed':
+        setStkStatus('success');
+        setStep('success');
+        if (selectedPackage) {
+          void handleSuccessfulPayment(selectedPackage.credits);
+        }
+        break;
+
+      case 'failed':
+        setStkStatus('failed');
+        toast({
+          title: "Payment Failed",
+          description: paymentData.error || "The payment could not be processed. Please try again.",
+          variant: "destructive"
+        });
+        break;
+
+      case 'timeout':
+        setStkStatus('failed');
+        toast({
+          title: "Payment Timeout",
+          description: "The payment request has expired. Please try again.",
+          variant: "destructive"
+        });
+        break;
+
+      default:
+        // Keep monitoring
+        break;
+    }
+  };
+
+  // Payment monitoring effect
+  useEffect(() => {
+    let unsubscribe: () => void;
+    let timeoutId: NodeJS.Timeout;
+
+    const startMonitoring = async () => {
+      if (!currentPaymentId || stkStatus !== 'processing') {
+        return;
+      }
+
+      console.log('Starting payment monitoring for:', currentPaymentId);
+      const paymentRef = ref(database, `stkPushRequests/${currentPaymentId}`);
+
+      // Set up Firebase listener
+      unsubscribe = onValue(paymentRef, (snapshot) => {
+        void handlePaymentStatusUpdate(snapshot.val());
+      });
+
+      // Set up timeout check
+      timeoutId = setTimeout(() => {
+        if (stkStatus === 'processing') {
+          void handlePaymentStatusUpdate({
+            status: 'timeout',
+            error: 'Payment request timed out'
+          });
+        }
+      }, 120000); // 2 minutes timeout
+    };
+
+    void startMonitoring();
+
+    // Cleanup function
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [currentPaymentId, stkStatus, handlePaymentStatusUpdate]);
+      void handlePaymentUpdate(snapshot.val());
+    });
+
+    // Set up timeout check
+    const timeoutId = setTimeout(() => {
+      if (stkStatus === 'processing') {
+        toast.dismiss();
+        setStkStatus('failed');
+        void set(ref(database, `stkPushRequests/${currentPaymentId}`), {
+          status: 'timeout',
+          lastUpdated: new Date().toISOString(),
+          error: 'Payment request timed out'
+        });
+        toast({
+          title: "Payment Timeout",
+          description: "The payment request has expired. Please try again.",
+          variant: "destructive"
+        });
+      }
+    }, 120000); // 2 minutes timeout
+
+    // Store cleanup functions
+    cleanupRef.current = () => {
+      console.log('Cleaning up monitoring for:', currentPaymentId);
+      unsubscribe();
+      clearTimeout(timeoutId);
+    };
+
+    // Cleanup on effect cleanup
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, [currentPaymentId, stkStatus, handlePaymentUpdate, toast]);
+
+  // Effect for handling payment status monitoring
+  useEffect(() => {
+    if (currentPaymentId && stkStatus === 'processing') {
+      console.log('Starting payment status monitoring for ID:', currentPaymentId);
+      const paymentRef = ref(database, `stkPushRequests/${currentPaymentId}`);
+      
+      // Set up payment monitoring
+      const unsubscribe = onValue(paymentRef, (snapshot) => {
+        void handlePaymentUpdate(snapshot.val());
+      });
+      
+      // Set up timeout
+      const timeoutId = setTimeout(() => {
+        if (stkStatus === 'processing') {
+          setStkStatus('failed');
+          void set(ref(database, `stkPushRequests/${currentPaymentId}`), {
+            status: 'timeout',
+            lastUpdated: new Date().toISOString(),
+            error: 'Payment request timed out'
+          });
+          toast({
+            title: "Payment Timeout",
+            description: "The payment request has expired. Please try again.",
+            variant: "destructive"
+          });
+        }
+      }, 120000); // 2 minutes timeout
+      
+      // Store cleanup
+      cleanupRef.current = () => {
+        unsubscribe();
+        clearTimeout(timeoutId);
+      };
+    }
+    
+    // Return cleanup function
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, [currentPaymentId, stkStatus, handleSuccessfulPayment, toast]);
+  
+  // Test phone numbers for development
+      
+      // Monitor the entire payment record for any changes
+      const paymentRef = ref(database, `stkPushRequests/${currentPaymentId}`);
+      let previousStatus = null;
+      
+      // Define the payment listener
+      const paymentListener = async (snapshot: any) => {
+        const paymentData = snapshot.val();
+        if (!paymentData) {
+          console.error('No payment data found for ID:', currentPaymentId);
+          return;
+        }
+
+        const currentStatus = paymentData.status;
+        console.log('Payment record update:', {
+          paymentId: currentPaymentId,
+          previousStatus,
+          currentStatus,
+          stkStatus,
+          lastUpdate: paymentData.lastUpdate,
+          fullData: paymentData,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Only process if status has changed
+        if (currentStatus !== previousStatus) {
+          previousStatus = currentStatus;
+          
+          // Handle different payment statuses
+          if (currentStatus === 'completed' || currentStatus === 'success') {
+            console.log('Payment completed successfully, updating credits...');
+            try {
+              await handleSuccessfulPayment(paymentData);
+              console.log('Successfully processed payment and updated credits');
+              setStkStatus('success');
+            } catch (error) {
+              console.error('Error processing successful payment:', error);
+              setStkStatus('failed');
+              toast({
+                title: "Error Processing Payment",
+                description: "There was an error adding credits. Please contact support.",
+                variant: "destructive"
+              });
+            }
+          } else if (currentStatus === 'failed' || currentStatus === 'cancelled') {
+            console.log('Payment failed or was cancelled');
+            setStkStatus('failed');
+            toast({
+              title: "Payment Failed",
+              description: "The payment was not completed. Please try again.",
+              variant: "destructive"
+            });
+          }
+        }
+      };
+
+      // Set up the monitoring
+      const setupMonitoring = () => {
+        // Register the payment status listener
+        const unsubscribe = onValue(paymentRef, paymentListener);
+        
+        // Start timeout check after 2 minutes
+        const timeoutId = setTimeout(() => {
+          if (stkStatus === 'processing') {
+            setStkStatus('failed');
+            void set(ref(database, `stkPushRequests/${currentPaymentId}`), {
+              status: 'timeout',
+              lastUpdated: new Date().toISOString(),
+              error: 'Payment request timed out'
+            });
+            toast({
+              title: "Payment Timeout",
+              description: "The payment request has expired. Please try again.",
+              variant: "destructive"
+            });
+          }
+        }, 120000); // 2 minutes timeout
+
+        return {
+          unsubscribe,
+          timeoutId
+        };
+      };
+
+      // Initialize monitoring
+      const { unsubscribe, timeoutId } = setupMonitoring();
+
+      // Store cleanup function
+      cleanupRef.current = () => {
+        unsubscribe();
+        clearTimeout(timeoutId);
+      };
+
+      // Return cleanup for useEffect
+      return () => {
+        if (cleanupRef.current) {
+          cleanupRef.current();
+          cleanupRef.current = null;
+        }
+      };
+    }
+
+    // Return empty cleanup if conditions aren't met
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, [currentPaymentId, stkStatus, handleSuccessfulPayment, toast]);
+          });
+          toast({
+            title: "Payment Timeout",
+            description: "The payment request has expired. Please try again.",
+            variant: "destructive"
+          });
+        }
+      }, 120000); // 2 minutes timeout
+
+      // Store cleanup function
+      cleanupRef.current = () => {
+        clearTimeout(timeoutId);
+        unsubscribe();
+      };
+    }
+
+    // Return single cleanup function that works both for unmount and condition changes
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, [currentPaymentId, stkStatus]);
+  
+  // Test phone numbers for development
+  const TEST_PHONE_NUMBERS = {
+    success: '0722000000',  // Number that will always succeed
+    timeout: '0722111111',  // Number that will timeout
+    insufficient: '0722222222',  // Number with insufficient funds
+    failed: '0722333333'  // Number that will fail
+  };
+
+  // Phone number validation and formatting
+  const validatePhoneNumber = (phone: string): boolean => {
+    // Remove any spaces or special characters
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    
+    // Check if it's a valid Kenyan phone number
+    if (cleanPhone.length === 10 && cleanPhone.startsWith('07')) {
+      return true;
+    }
+    if (cleanPhone.length === 12 && cleanPhone.startsWith('2547')) {
+      return true;
+    }
+    return false;
+  };
+
+  const formatPhoneNumber = (phone: string): string => {
+    // Remove any non-digit characters
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    
+    // Convert to international format if needed
+    if (cleanPhone.length === 10 && cleanPhone.startsWith('07')) {
+      return `254${cleanPhone.slice(1)}`;
+    }
+    if (cleanPhone.length === 12 && cleanPhone.startsWith('2547')) {
+      return cleanPhone;
+    }
+    return phone;
+  };
+
+  const getTestResult = (phone: string): string | null => {
+    if (!isTestMode) return null;
+    
+    switch(phone) {
+      case TEST_PHONE_NUMBERS.success:
+        return 'Payment will succeed';
+      case TEST_PHONE_NUMBERS.timeout:
+        return 'Payment will timeout';
+      case TEST_PHONE_NUMBERS.insufficient:
+        return 'Payment will fail - insufficient funds';
+      case TEST_PHONE_NUMBERS.failed:
+        return 'Payment will fail - general error';
+      default:
+        return null;
+    }
+  };
+
+  const handlePackageSelect = (pkg: CreditPackage) => {
+    setSelectedPackage(pkg);
+    setStep('payment');
+  };
+
+  const handleStkPush = () => {
+    setStep('stk-push');
+  };
+
+  const handleContactAgent = () => {
+    setStep('agent');
+  };
+
+  const resetModal = () => {
+    setStep('packages');
+    setSelectedPackage(null);
+    setPhoneNumber('');
+    setIsProcessing(false);
+    setStkStatus('idle');
+  };
+
+  const handleClose = () => {
+    onClose();
+    resetModal();
+    setCurrentPaymentId(null);
+  };
+
+  const handleSuccessfulPayment = async () => {
+    console.log('Starting handleSuccessfulPayment with:', {
+      userId: user?.id,
+      packageSelected: selectedPackage,
+      paymentId: currentPaymentId
+    });
+
+    if (!user || !selectedPackage) {
+      console.error('Missing user or package data:', { user, selectedPackage });
+      toast({
+        title: "System Error",
+        description: "Critical data missing. Please contact support.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      console.log('Updating payment status in Firebase...');
+      // First update the payment status in Firebase
+      if (currentPaymentId) {
+        await update(ref(database, `stkPushRequests/${currentPaymentId}`), {
+          status: 'completed',
+          completedAt: new Date().toISOString()
+        });
+        console.log('Successfully updated payment status to completed');
+      }
+
+      // Update user's credits based on package type
+      console.log('Fetching current user credits...');
+      const userRef = ref(database, `users/${user.id}`);
+      const userSnapshot = await get(userRef);
+      const userData = userSnapshot.val();
+      
+      console.log('Current user data:', userData);
+      
+      const currentCredits = type === 'video' ? 
+        (userData.videoCredits || 0) : 
+        (userData.credits || 0);
+      
+      const newCredits = currentCredits + selectedPackage.credits;
+      
+      console.log('Credit update calculation:', {
+        type,
+        currentCredits,
+        addingCredits: selectedPackage.credits,
+        newTotal: newCredits
+      });
+      
+      // Update the specific credit type
+      if (type === 'video') {
+        console.log('Updating video credits...');
+        await update(userRef, { videoCredits: newCredits });
+        await updateVideoCredits(selectedPackage.credits);
+      } else {
+        console.log('Updating regular credits...');
+        await update(userRef, { credits: newCredits });
+        await updateCredits(selectedPackage.credits);
+      }
+      console.log('Successfully updated credits in Firebase');
+
+      // Log the payment transaction
+      const transactionRef = push(ref(database, 'paymentTransactions'));
+      
+      if (!transactionRef.key) {
+        throw new Error('Failed to create transaction record');
+      }
+
+      const transactionData = {
+        userId: user.id,
+        packageType: type,
+        creditsAdded: selectedPackage.credits,
+        newBalance: newCredits,
+        amount: selectedPackage.price,
+        paymentMethod: 'mpesa-stk',
+        status: 'completed',
+        timestamp: new Date().toISOString(),
+        transactionId: transactionRef.key
+      };
+
+      await set(transactionRef, transactionData);
+
+      // Show success message
+      toast({
+        title: "Payment Successful!",
+        description: `${selectedPackage.credits} credits have been added to your account`,
+      });
+
+      // Close modal and refresh page after a short delay
+      setTimeout(() => {
+        handleClose();
+        window.location.reload();
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Error processing payment:', error);
+      
+      // Log the failed transaction
+      const errorTransactionRef = push(ref(database, 'failedTransactions'));
+      await set(errorTransactionRef, {
+        userId: user.id,
+        packageType: type,
+        credits: selectedPackage.credits,
+        amount: selectedPackage.price,
+        paymentMethod: 'mpesa-stk',
+        status: 'failed',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }).catch(console.error);
+
+      toast({
+        title: "Error Processing Payment",
+        description: "There was an error adding credits. Our team has been notified and will assist you shortly.",
+        variant: "destructive"
+      });
+    }
+  };
+
+
+
+  const initiateSTKPush = async (): Promise<void> => {
+    if (!phoneNumber || !selectedPackage) {
+      toast({
+        title: "Missing Information",
+        description: "Please select a package and enter your phone number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to make a payment",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!validatePhoneNumber(phoneNumber)) {
+      toast({
+        title: "Invalid Phone Number",
+        description: "Please enter a valid Safaricom number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    let paymentId: string | null = null;
+    
+    try {
+      setIsProcessing(true);
+      setStkStatus('processing');
+
+      // Create initial payment record
+      const paymentRef = push(ref(database, 'stkPushRequests'));
+      paymentId = paymentRef.key;
+
+      if (!paymentId) {
+        throw new Error('Failed to create payment record');
+      }
+
+      // Store initial request details
+      console.log('Creating initial payment record...');
+      const initialPaymentData = {
+        userId: user.id,
+        phoneNumber: formattedPhone,
+        amount: selectedPackage.price,
+        status: 'pending',
+        package: {
+          credits: selectedPackage.credits,
+          type: type
+        },
+        timestamp: new Date().toISOString(),
+        environment: import.meta.env.MODE,
+        statusHistory: [{
+          status: 'pending',
+          timestamp: new Date().toISOString()
+        }]
+      };
+      
+      console.log('Setting initial payment data:', initialPaymentData);
+      await set(paymentRef, initialPaymentData);
+
+      // Initialize payment with PayHero
+      console.log('Initiating payment with PayHero...', {
+        amount: selectedPackage.price,
+        phone: formattedPhone,
+        paymentId,
+        customerName: user?.name
+      });
+
+      const response = await payHeroService.initiatePayment({
+        amount: selectedPackage.price,
+        phone_number: formattedPhone,
+        external_reference: paymentId,
+        customer_name: user?.name,
+        callback_url: import.meta.env.VITE_PAYHERO_CALLBACK_URL
+      });
+
+      console.log('PayHero Response:', {
+        success: response.success,
+        data: response.data,
+        error: response.error
+      });
+
+      if (!response.success) {
+        console.error('PayHero payment initiation failed:', response.error);
+        throw new Error(response.error || 'Payment initiation failed');
+      }
+
+      console.log('Payment successfully initiated with PayHero');
+
+      // Update record with successful initiation
+      const data = response.data;
+      console.log('Updating payment record with PayHero response data:', data);
+
+      const now = new Date().toISOString();
+      const updateData = {
+        status: 'initiated',
+        checkoutRequestId: data.CheckoutRequestID || null,
+        paymentReference: data.reference || null,
+        merchantRequestId: data.MerchantRequestID || null,
+        responseDescription: data.ResponseDescription || null,
+        updatedAt: now,
+        lastUpdate: {
+          status: 'initiated',
+          timestamp: now,
+          details: {
+            checkoutRequestId: data.CheckoutRequestID || null,
+            paymentReference: data.reference || null
+          }
+        }
+      };
+
+      console.log('Updating Firebase payment record:', updateData);
+
+      try {
+        await update(paymentRef, updateData);
+        console.log('Successfully updated payment record in Firebase');
+      } catch (updateError) {
+        console.error('Error updating payment record:', updateError);
+        throw updateError;
+      }
+
+      // Show success message and begin monitoring
+      toast({
+        title: "Payment Initiated",
+        description: "Please check your phone to complete the payment"
+      });
+      
+      // Set the current payment ID to begin monitoring
+      setCurrentPaymentId(paymentId);
+
+    } catch (error) {
+      console.error('STK Push error:', error);
+      setStkStatus('failed');
+      
+      // Update payment record with error
+      if (paymentId) {
+        void set(ref(database, `stkPushRequests/${paymentId}`), {
+          status: 'failed',
+          error: error instanceof Error ? error.message : 'Unknown error occurred',
+          lastUpdated: new Date().toISOString()
+        });
+      }
+
+      // Show appropriate error message
+      toast({
+        title: "Payment Failed",
+        description: error instanceof Error ? error.message : "Failed to initiate payment. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      if (!currentPaymentId) {
+        setIsProcessing(false);
+        setStkStatus('idle');
+      }
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="max-w-md h-[90vh] flex flex-col gap-0 p-0">
+        <DialogHeader className="p-6 pb-0">
+          <DialogTitle>Purchase Credits</DialogTitle>
+        </DialogHeader>
+
+        <ScrollArea className="flex-grow px-6">
+          <div className="space-y-4 py-4">
+            {step === 'packages' && (
+              <div className="grid gap-4">
+                {creditPackages.map((pkg, index) => (
+                  <Card 
+                    key={index} 
+                    className={`cursor-pointer transition-all hover:border-primary ${
+                      selectedPackage === pkg ? 'border-primary' : ''
+                    }`}
+                    onClick={() => handlePackageSelect(pkg)}
+                  >
+                    <CardContent className="flex justify-between items-center p-4">
+                      <div>
+                        <h3 className="font-semibold">{pkg.credits} Credits</h3>
+                        <p className="text-sm text-muted-foreground">{pkg.description}</p>
+                        {pkg.savings && (
+                          <span className="text-xs text-green-600">{pkg.savings}</span>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">KSH {pkg.price}</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {step === 'payment' && selectedPackage && (
+              <div className="space-y-6">
+                <div className="text-center space-y-2">
+                  <h3 className="font-semibold text-lg">
+                    {selectedPackage.credits} Credits
+                  </h3>
+                  <p className="text-2xl font-bold">
+                    KSH {selectedPackage.price}
+                  </p>
+                </div>
+
+                <div className="grid gap-4">
+                  <Button
+                    onClick={handleStkPush}
+                    className="w-full h-auto py-4 gap-3"
+                  >
+                    <Smartphone className="h-5 w-5" />
+                    <div className="text-left">
+                      <p className="font-semibold">Pay with M-Pesa</p>
+                      <p className="text-xs opacity-90">
+                        Get credits instantly via STK push
+                      </p>
+                    </div>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={handleContactAgent}
+                    className="w-full h-auto py-4 gap-3"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    <div className="text-left">
+                      <p className="font-semibold">Contact Agent</p>
+                      <p className="text-xs opacity-90">
+                        Chat with an agent for assistance
+                      </p>
+                    </div>
+                  </Button>
+                </div>
+
+                <Button
+                  variant="ghost"
+                  onClick={() => setStep('packages')}
+                  className="w-full"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Change Package
+                </Button>
+              </div>
+            )}
+
+            {step === 'stk-push' && selectedPackage && (
+              <>
+                {stkStatus === 'idle' && (
+                  <div className="space-y-6">
+                    <div className="text-center space-y-2">
+                      <p className="text-sm text-muted-foreground">Amount to Pay</p>
+                      <p className="text-2xl font-bold">KSH {selectedPackage.price}</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="phone">M-Pesa Phone Number</Label>
+                        <Input
+                          id="phone"
+                          placeholder="07XX XXX XXX"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                        />
+                      </div>
+
+                      <Button
+                        onClick={initiateSTKPush}
+                        disabled={isProcessing || !phoneNumber}
+                        className="w-full"
+                      >
+                        {isProcessing ? (
+                          <>Processing...</>
+                        ) : (
+                          <>Pay Now</>
+                        )}
+                      </Button>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      onClick={() => setStep('payment')}
+                      className="w-full"
+                    >
+                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      Back
+                    </Button>
+                  </div>
+                )}
+
+                {stkStatus === 'processing' && (
+                  <div className="text-center py-6 space-y-4">
+                    <Clock className="h-12 w-12 mx-auto text-blue-600 animate-pulse" />
+                    <div>
+                      <p className="font-semibold">Check your phone</p>
+                      <p className="text-sm text-muted-foreground">
+                        Enter M-Pesa PIN to complete payment
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {stkStatus === 'success' && (
+                  <div className="text-center py-6 space-y-4">
+                    <CheckCircle className="h-12 w-12 mx-auto text-green-600" />
+                    <div>
+                      <p className="font-semibold text-green-600">Payment Successful!</p>
+                      <p className="text-sm text-muted-foreground">
+                        Credits have been added to your account
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={handleClose}
+                      className="w-full"
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                )}
+
+                {stkStatus === 'failed' && (
+                  <div className="text-center py-6 space-y-4">
+                    <AlertCircle className="h-12 w-12 mx-auto text-red-600" />
+                    <div>
+                      <p className="font-semibold text-red-600">Payment Failed</p>
+                      <p className="text-sm text-muted-foreground">
+                        Payment request was cancelled or failed
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={() => setStkStatus('idle')}
+                      className="w-full"
+                    >
+                      Try Again
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </ScrollArea>
+
+        <div className="flex-shrink-0 space-y-4 pt-4 border-t">
+          <div className="flex items-center justify-center gap-2 text-muted-foreground text-xs sm:text-sm">
+            <CreditCard className="h-4 w-4" />
+            <span>Secure payment via M-Pesa or agent contact</span>
+          </div>
+
+          <Button variant="outline" onClick={handleClose} className="w-full">
+            Cancel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default PaymentModal;

@@ -1,171 +1,215 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useImageUpload } from '@/hooks/useImageUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Heart } from 'lucide-react';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { Heart, Upload } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
-
-/**
- * REGISTER PAGE - BACKEND INTEGRATION GUIDE
- * 
- * TODO: Replace mock registration with Supabase Auth
- * 
- * SUPABASE INTEGRATION STEPS:
- * 1. Replace useAuth().register() with supabase.auth.signUp()
- * 2. Create user profile in 'profiles' table after successful registration
- * 3. Implement email verification flow
- * 4. Add profile picture upload functionality
- * 
- * DATABASE SCHEMA:
- * Table: profiles (auto-created after auth.users registration)
- * - id (uuid, primary key, foreign key to auth.users.id)
- * - name (text, not null)
- * - age (integer, check constraint: age >= 18)
- * - gender (enum: 'male', 'female', 'other')
- * - looking_for (enum: 'male', 'female', 'all')
- * - location (text)
- * - bio (text)
- * - interests (text[] array)
- * - profile_pictures (text[] array of URLs)
- * - is_verified (boolean, default false)
- * - is_premium (boolean, default false)
- * - credits (integer, default 5)
- * - video_credits (integer, default 0)
- * - created_at (timestamp, default now())
- * - updated_at (timestamp, default now())
- * 
- * FEATURES TO IMPLEMENT:
- * - Email verification before profile activation
- * - Profile picture upload with image compression
- * - Interest suggestions based on categories
- * - Location autocomplete using Google Places API
- * - Age verification (18+ requirement)
- * - Username availability check
- * - Social media account linking
- * - Phone number verification (optional)
- * 
- * VALIDATION:
- * - Email format validation
- * - Password strength requirements
- * - Profanity filter for bio and name
- * - Image content moderation
- * - Duplicate account prevention
- * 
- * ONBOARDING FLOW:
- * - Welcome email with app features
- * - Profile completion prompts
- * - Matching preferences setup
- * - Initial credit allocation
- * - Tutorial for app usage
- */
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const Register: React.FC = () => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadImage, uploading } = useImageUpload();
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
+    confirmPassword: '',
     gender: '',
     lookingFor: '',
     age: '',
     location: '',
     bio: '',
-    interests: ''
+    interests: '',
+    profileImage: '',
   });
 
   const { register } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      // Create a preview
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+
+      // Upload to Firebase Storage
+      const imageUrl = await uploadImage(file);
+      setFormData(prev => ({ ...prev, profileImage: imageUrl }));
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload image",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.email || !formData.password || !formData.gender || !formData.lookingFor || !formData.age) {
+    if (!formData.profileImage) {
       toast({
-        title: "Missing information",
-        description: "Please fill in all required fields.",
+        title: "Error",
+        description: "Please upload a profile picture",
         variant: "destructive"
       });
       return;
     }
 
-    register({
-      name: formData.name,
-      email: formData.email,
-      gender: formData.gender as 'Male' | 'Female' | 'Other',
-      lookingFor: formData.lookingFor as 'Male' | 'Female' | 'All',
-      age: parseInt(formData.age),
-      location: formData.location,
-      bio: formData.bio,
-      interests: formData.interests.split(',').map(i => i.trim()).filter(Boolean)
-    });
+    if (formData.password !== formData.confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    toast({
-      title: "Welcome to LoveMatch!",
-      description: "Your account has been created. You have 5 free message credits!"
-    });
-    
-    navigate('/');
-  };
+    try {
+      await register({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        profileImage: formData.profileImage,
+        gender: formData.gender as 'Male' | 'Female' | 'Other',
+        lookingFor: formData.lookingFor as 'Male' | 'Female' | 'All',
+        age: parseInt(formData.age),
+        location: formData.location,
+        bio: formData.bio,
+        interests: formData.interests.split(',').map(i => i.trim())
+      });
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+      toast({
+        title: "Success",
+        description: "Registration successful! Please login.",
+      });
+      
+      // Redirect to login page after successful registration
+      navigate('/login');
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Registration failed",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl bg-gradient-card shadow-romantic">
-        <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
-            <Heart className="h-12 w-12 text-primary animate-pulse-glow" />
-          </div>
-          <CardTitle className="text-2xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-            Join LoveMatch
+    <div className="container flex items-center justify-center min-h-screen py-8">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1 text-center">
+          <CardTitle className="text-2xl flex justify-center items-center gap-2">
+            <Heart className="h-6 w-6 text-primary" />
+            Create Account
           </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="name">Full Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => handleInputChange('name', e.target.value)}
-                  required
-                />
+            <div className="flex flex-col items-center space-y-4">
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={handleImageUpload}
+              />
+              <div 
+                onClick={handleAvatarClick} 
+                className="cursor-pointer hover:opacity-80 transition-opacity"
+              >
+                <Avatar className="w-32 h-32 border-2 border-primary">
+                  <AvatarImage src={previewImage || undefined} />
+                  <AvatarFallback className="bg-muted">
+                    {uploading ? (
+                      "Uploading..."
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <Upload className="h-8 w-8 mb-2" />
+                        <span className="text-sm">Add Photo</span>
+                      </div>
+                    )}
+                  </AvatarFallback>
+                </Avatar>
               </div>
-              <div>
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  required
-                />
-              </div>
+              <p className="text-sm text-muted-foreground">
+                Click to upload profile picture
+              </p>
             </div>
 
-            <div>
-              <Label htmlFor="password">Password *</Label>
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
               <Input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => handleInputChange('password', e.target.value)}
+                id="name"
+                placeholder="Enter your name"
+                value={formData.name}
+                onChange={(e) => handleChange('name', e.target.value)}
+                required
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                value={formData.email}
+                onChange={(e) => handleChange('email', e.target.value)}
                 required
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label>Gender *</Label>
-                <Select value={formData.gender} onValueChange={(value) => handleInputChange('gender', value)}>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Create a password"
+                value={formData.password}
+                onChange={(e) => handleChange('password', e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="Confirm your password"
+                value={formData.confirmPassword}
+                onChange={(e) => handleChange('confirmPassword', e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>I am a</Label>
+                <Select onValueChange={(value) => handleChange('gender', value)} required>
                   <SelectTrigger>
                     <SelectValue placeholder="Select gender" />
                   </SelectTrigger>
@@ -176,11 +220,12 @@ const Register: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label>Looking for *</Label>
-                <Select value={formData.lookingFor} onValueChange={(value) => handleInputChange('lookingFor', value)}>
+
+              <div className="space-y-2">
+                <Label>Looking for</Label>
+                <Select onValueChange={(value) => handleChange('lookingFor', value)} required>
                   <SelectTrigger>
-                    <SelectValue placeholder="Looking for" />
+                    <SelectValue placeholder="Select preference" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Male">Male</SelectItem>
@@ -191,64 +236,63 @@ const Register: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="age">Age *</Label>
-                <Input
-                  id="age"
-                  type="number"
-                  min="18"
-                  max="100"
-                  value={formData.age}
-                  onChange={(e) => handleInputChange('age', e.target.value)}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  value={formData.location}
-                  onChange={(e) => handleInputChange('location', e.target.value)}
-                  placeholder="City, State"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="bio">Bio</Label>
-              <Textarea
-                id="bio"
-                value={formData.bio}
-                onChange={(e) => handleInputChange('bio', e.target.value)}
-                placeholder="Tell us about yourself..."
-                rows={3}
+            <div className="space-y-2">
+              <Label htmlFor="age">Age</Label>
+              <Input
+                id="age"
+                type="number"
+                min="18"
+                placeholder="Enter your age"
+                value={formData.age}
+                onChange={(e) => handleChange('age', e.target.value)}
+                required
               />
             </div>
 
-            <div>
-              <Label htmlFor="interests">Interests</Label>
+            <div className="space-y-2">
+              <Label htmlFor="location">Location</Label>
+              <Input
+                id="location"
+                placeholder="Enter your location"
+                value={formData.location}
+                onChange={(e) => handleChange('location', e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bio">Bio</Label>
+              <Input
+                id="bio"
+                placeholder="Tell us about yourself"
+                value={formData.bio}
+                onChange={(e) => handleChange('bio', e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="interests">Interests (comma-separated)</Label>
               <Input
                 id="interests"
+                placeholder="e.g., music, travel, cooking"
                 value={formData.interests}
-                onChange={(e) => handleInputChange('interests', e.target.value)}
-                placeholder="travel, food, music (comma separated)"
+                onChange={(e) => handleChange('interests', e.target.value)}
+                required
               />
             </div>
 
-            <Button type="submit" className="w-full bg-gradient-primary shadow-romantic hover:opacity-90">
-              Create Account
+            <Button type="submit" className="w-full" disabled={uploading}>
+              {uploading ? "Uploading Image..." : "Sign Up"}
             </Button>
-          </form>
-          
-          <div className="mt-6 text-center">
-            <p className="text-muted-foreground">
-              Already have an account?{' '}
-              <Link to="/login" className="text-primary hover:underline font-medium">
-                Sign in here
+
+            <div className="text-center text-sm">
+              Already have an account?{" "}
+              <Link to="/login" className="text-primary hover:underline">
+                Sign in
               </Link>
-            </p>
-          </div>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>

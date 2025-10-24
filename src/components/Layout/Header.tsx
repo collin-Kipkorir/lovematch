@@ -127,10 +127,7 @@ const Header: React.FC = () => {
                       <MessageCircle className="h-4 w-4 text-primary-foreground" />
                       <span className="text-primary-foreground text-sm font-medium">{user.credits}</span>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-primary-foreground text-xs">📹</span>
-                      <span className="text-primary-foreground text-sm font-medium">{user.videoCredits}</span>
-                    </div>
+                    
                   </div>
                 )}
                 

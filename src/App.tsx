@@ -16,8 +16,9 @@ import Chat from "./pages/Chat";
 import Chats from "./pages/Chats";
 import Profile from "./pages/Profile";
 import AdminHelp from "./pages/AdminHelp";
-import Payment from "./pages/Payment";
+import PaymentPage from "./pages/PaymentPage";
 import Admin from "./pages/Admin";
+import InstallPrompt from "./components/InstallPrompt";
 import AdminLogin from "./pages/AdminLogin";
 import NotFound from "./pages/NotFound";
 import ModeratorApplication from "./pages/ModeratorApplication";
@@ -32,6 +33,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <InstallPrompt />
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
@@ -42,7 +44,7 @@ const App = () => (
               <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/chat/:profileId" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
               <Route path="/admin-help" element={<ProtectedRoute><AdminHelp /></ProtectedRoute>} />
-              <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
+              <Route path="/payment" element={<ProtectedRoute><PaymentPage /></ProtectedRoute>} />
               <Route path="/admin-login" element={<AdminLogin />} />
               <Route path="/admin/*" element={<AdminProtectedRoute><Admin /></AdminProtectedRoute>} />
               <Route path="/apply/moderator" element={<ModeratorApplication />} />

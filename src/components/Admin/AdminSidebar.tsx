@@ -104,6 +104,13 @@ const sidebarItems: SidebarItem[] = [
     icon: Shield,
     requiresSuperAdmin: true,
   },
+  {
+    title: 'Moderator Applications',
+    href: '/admin/moderator-applications',
+    icon: UserPlus,
+    requiresSuperAdmin: true,
+    badge: '5', // TODO: Backend - Dynamic count of pending applications
+  },
 ];
 
 const AdminSidebar: React.FC<AdminSidebarProps> = ({ onClose }) => {
