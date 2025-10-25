@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Heart } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
+import { motion } from 'framer-motion';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -17,76 +18,135 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
-      const success = await loginWithEmailAndPhone(email, password);
+      const success = await loginWithEmailAndPhone(email.toLowerCase(), password);
       if (success) {
         toast({
-          title: "Success",
-          description: "Login successful!",
+          title: 'Success',
+          description: 'Login successful!',
         });
         navigate('/home');
       } else {
         toast({
-          title: "Error",
-          description: "Invalid email or password",
-          variant: "destructive"
+          title: 'Error',
+          description: 'Invalid email or password',
+          variant: 'destructive',
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "An error occurred during login",
-        variant: "destructive"
+        title: 'Error',
+        description: error.message || 'An error occurred during login',
+        variant: 'destructive',
       });
     }
   };
 
   return (
-    <div className="container flex items-center justify-center min-h-screen">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl flex justify-center items-center gap-2">
-            <Heart className="h-6 w-6 text-primary" />
-            Welcome Back
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <Button type="submit" className="w-full">
-              Sign In
-            </Button>
-          </form>
-          <div className="mt-4 text-center text-sm">
-            Don't have an account?{" "}
-            <Link to="/register" className="text-primary hover:underline">
-              Sign up
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
+    <div className="relative flex items-center justify-center min-h-screen bg-gradient-to-br from-pink-100 via-white to-pink-50 px-2 sm:px-4 md:px-6">
+      {/* Floating Hearts */}
+      <motion.div
+        className="absolute inset-0 overflow-hidden pointer-events-none"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.15 }}
+        transition={{ duration: 1 }}
+      >
+        {[...Array(8)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute text-pink-400"
+            initial={{ y: 800, opacity: 0 }}
+            animate={{
+              y: -50,
+              opacity: [0, 1, 0],
+              x: [0, Math.random() * 50 - 25],
+            }}
+            transition={{
+              repeat: Infinity,
+              duration: 8 + Math.random() * 4,
+              delay: i * 1,
+            }}
+          >
+            <Heart className="w-5 h-5" />
+          </motion.div>
+        ))}
+      </motion.div>
+
+      {/* Login Card */}
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-lg" // increased width for better balance
+      >
+        <Card className="shadow-xl backdrop-blur-sm bg-white/90 rounded-2xl border border-pink-200">
+          <CardHeader className="space-y-1 text-center pb-2">
+            <motion.div
+              initial={{ rotate: 0 }}
+              animate={{ rotate: [0, -10, 10, 0] }}
+              transition={{ duration: 2, repeat: Infinity, repeatDelay: 4 }}
+              className="flex justify-center"
+            >
+              <Heart className="h-8 w-8 text-primary drop-shadow-md" />
+            </motion.div>
+            <CardTitle className="text-3xl font-semibold text-gray-900">
+              Welcome Back 💕
+            </CardTitle>
+            <p className="text-sm text-gray-600">
+              Sign in to continue your love story
+            </p>
+          </CardHeader>
+
+          <CardContent className="px-6 pb-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-gray-900 font-medium">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value.toLowerCase())}
+                  required
+                  className="rounded-lg border-pink-200 focus:border-pink-400 focus:ring-pink-300"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-gray-900 font-medium">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="rounded-lg border-pink-200 focus:border-pink-400 focus:ring-pink-300"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full rounded-lg bg-primary hover:bg-primary/90 shadow-md"
+              >
+                Sign In
+              </Button>
+
+              <div className="text-center text-sm text-gray-700">
+                Don’t have an account?{' '}
+                <Link to="/register" className="text-primary hover:underline">
+                  Sign up
+                </Link>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </motion.div>
     </div>
   );
 };
