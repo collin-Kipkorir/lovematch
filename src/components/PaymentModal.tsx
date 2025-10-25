@@ -242,54 +242,39 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
       packageType: type,
       credits: selectedPackage?.credits || 0,
       checkoutRequestId,
-      onSuccess: async () => {
+      onSuccess: async (paymentDataFromPoll?: any) => {
+        // Centralize success handling to avoid duplicate credit updates.
         setStkStatus('success');
         setStep('success');
-        
+
         try {
-          // Get current user credits
-          const userRef = ref(database, `users/${user.id}`);
-          const userSnapshot = await get(userRef);
-          const currentCredits = userSnapshot.val()?.credits || 0;
+          // Determine a stable payment key (reference/providerReference or currentPaymentId)
+          const paymentKey = paymentDataFromPoll?.reference || paymentDataFromPoll?.providerReference || currentPaymentId;
 
-          // Calculate new credits
-          const newCredits = currentCredits + (selectedPackage?.credits || 0);
-
-          // Update user credits
-          await update(userRef, {
-            credits: newCredits
-          });
-
-          // Update local credits state
-          updateCredits(newCredits);
-
-          // Log successful transaction
-          if (selectedPackage) {
-            const transactionRef = push(ref(database, 'paymentTransactions'));
-            await set(transactionRef, {
-              userId: user.id,
-              packageType: type,
-              credits: selectedPackage.credits,
-              amount: selectedPackage.price,
-              paymentMethod: 'mpesa-stk',
-              status: 'completed',
-              timestamp: new Date().toISOString(),
-              transactionId: transactionRef.key
-            });
+          // If we've already processed this payment elsewhere (firebase listener or manual), skip
+          if (paymentKey && processedPayments.current.has(paymentKey)) {
+            console.log('onSuccess: payment already processed, skipping duplicate update:', paymentKey);
+            return;
           }
+
+          // Delegate to the shared success handler which performs atomic updates and logging
+          await handleSuccessfulPayment(paymentDataFromPoll || {
+            amount: selectedPackage?.price,
+            package: selectedPackage,
+            checkoutRequestId,
+            reference: currentPaymentId
+          });
 
           toast({
             title: "Payment Successful!",
             description: `Credits have been added to your account.`,
             variant: "success"
           });
-
-          // Modal will stay open until user clicks Continue
         } catch (error) {
-          console.error('Error updating credits:', error);
+          console.error('Error in onSuccess handler:', error);
           toast({
             title: "Error",
-            description: "Failed to update credits. Please contact support.",
+            description: "Failed to finalize credits. Please contact support.",
             variant: "destructive"
           });
         }
