@@ -126,9 +126,28 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
     }
 
     try {
-      // Mark payment as processed
+      // Mark payment as processed (in-memory) to avoid immediate duplicates
       processedPayments.current.add(paymentKey);
       console.log('Processing new payment:', paymentKey);
+
+      // Idempotency guard: derive a stable key from available payment identifiers
+      const stableKey = paymentData?.providerReference || paymentData?.paymentReference || paymentData?.reference || paymentData?.externalReference || paymentData?.checkoutRequestId || checkoutRequestId || currentPaymentId;
+
+      if (stableKey) {
+        try {
+          // Check if a transaction already exists for this payment (prevents double credit adds)
+          const txByPaymentRef = await get(query(ref(database, 'paymentTransactions'), orderByChild('paymentReference'), equalTo(stableKey)));
+          const txByProviderRef = await get(query(ref(database, 'paymentTransactions'), orderByChild('providerReference'), equalTo(stableKey)));
+          const txByCheckout = await get(query(ref(database, 'paymentTransactions'), orderByChild('checkoutRequestId'), equalTo(stableKey)));
+
+          if ((txByPaymentRef && txByPaymentRef.exists()) || (txByProviderRef && txByProviderRef.exists()) || (txByCheckout && txByCheckout.exists())) {
+            console.log('Payment already recorded in paymentTransactions, skipping duplicate credit update for key:', stableKey);
+            return;
+          }
+        } catch (e) {
+          console.warn('Error while checking existing transactions for idempotency, continuing processing (safe fallback):', e);
+        }
+      }
 
       // Get current user data
       const userRef = ref(database, `users/${user.id}`);
