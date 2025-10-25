@@ -116,7 +116,7 @@ const Register: React.FC = () => {
   };
 
   return (
-    <div className="relative flex items-center justify-center min-h-screen bg-gradient-to-br from-pink-100 via-white to-pink-50 px-2 sm:px-4 md:px-6">
+    <div className="relative flex items-center justify-center min-h-screen bg-gradient-hero px-2 sm:px-4 md:px-6">
       {/* Floating Hearts */}
       <motion.div
         className="absolute inset-0 overflow-hidden pointer-events-none"
@@ -127,7 +127,7 @@ const Register: React.FC = () => {
         {[...Array(8)].map((_, i) => (
           <motion.div
             key={i}
-            className="absolute text-pink-400"
+            className="absolute text-romance"
             initial={{ y: 800, opacity: 0 }}
             animate={{
               y: -50,
@@ -152,7 +152,7 @@ const Register: React.FC = () => {
         transition={{ duration: 0.5 }}
         className="w-full max-w-lg"
       >
-        <Card className="shadow-xl backdrop-blur-sm bg-white/90 rounded-2xl border border-pink-200">
+        <Card className="shadow-romantic backdrop-blur-sm bg-card/80 rounded-2xl border border-border">
           <CardHeader className="space-y-2 text-center pb-2">
             <motion.div
               initial={{ rotate: 0 }}
@@ -162,10 +162,10 @@ const Register: React.FC = () => {
             >
               <Heart className="h-8 w-8 text-primary drop-shadow-md" />
             </motion.div>
-            <CardTitle className="text-3xl font-semibold text-gray-900">
+            <CardTitle className="text-3xl font-semibold text-foreground">
               Create Account 💞
             </CardTitle>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Find your perfect match today
             </p>
           </CardHeader>
@@ -210,7 +210,7 @@ const Register: React.FC = () => {
                 { id: 'email', label: 'Email', placeholder: 'Enter your email', type: 'email' },
               ].map(({ id, label, placeholder, type }) => (
                 <div key={id} className="space-y-2">
-                  <Label htmlFor={id} className="text-gray-900 font-medium">{label}</Label>
+                  <Label htmlFor={id} className="text-muted-foreground font-medium">{label}</Label>
                   <Input
                     id={id}
                     type={type || 'text'}
@@ -220,7 +220,7 @@ const Register: React.FC = () => {
                       handleChange(id, id === 'email' ? e.target.value.toLowerCase() : e.target.value)
                     }
                     required
-                    className="rounded-lg border-pink-200 focus:border-pink-400 focus:ring-pink-300"
+                    className="rounded-lg border-border focus:border-primary focus:ring-primary/30"
                   />
                 </div>
               ))}
@@ -231,7 +231,7 @@ const Register: React.FC = () => {
                 { id: 'confirmPassword', label: 'Confirm Password', placeholder: 'Confirm your password' },
               ].map(({ id, label, placeholder }) => (
                 <div key={id} className="space-y-2">
-                  <Label htmlFor={id} className="text-gray-900 font-medium">{label}</Label>
+                  <Label htmlFor={id} className="text-muted-foreground font-medium">{label}</Label>
                   <Input
                     id={id}
                     type="password"
@@ -239,7 +239,7 @@ const Register: React.FC = () => {
                     value={formData[id as keyof typeof formData] as string}
                     onChange={(e) => handleChange(id, e.target.value)}
                     required
-                    className="rounded-lg border-pink-200 focus:border-pink-400 focus:ring-pink-300"
+                    className="rounded-lg border-border focus:border-primary focus:ring-primary/30"
                   />
                 </div>
               ))}
@@ -247,7 +247,7 @@ const Register: React.FC = () => {
               {/* Gender and Preference */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-gray-900 font-medium">I am a</Label>
+                  <Label className="text-muted-foreground font-medium">I am a</Label>
                   <Select onValueChange={(value) => handleChange('gender', value)} required>
                     <SelectTrigger>
                       <SelectValue placeholder="Select gender" />
@@ -261,7 +261,7 @@ const Register: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-gray-900 font-medium">Looking for</Label>
+                  <Label className="text-muted-foreground font-medium">Looking for</Label>
                   <Select onValueChange={(value) => handleChange('lookingFor', value)} required>
                     <SelectTrigger>
                       <SelectValue placeholder="Select preference" />
@@ -283,7 +283,7 @@ const Register: React.FC = () => {
                 { id: 'interests', label: 'Interests (comma-separated)', placeholder: 'e.g., music, travel, cooking' },
               ].map(({ id, label, placeholder, type }) => (
                 <div key={id} className="space-y-2">
-                  <Label htmlFor={id} className="text-gray-900 font-medium">{label}</Label>
+                  <Label htmlFor={id} className="text-muted-foreground font-medium">{label}</Label>
                   <Input
                     id={id}
                     type={type || 'text'}
@@ -291,17 +291,17 @@ const Register: React.FC = () => {
                     value={formData[id as keyof typeof formData] as string}
                     onChange={(e) => handleChange(id, e.target.value)}
                     required
-                    className="rounded-lg border-pink-200 focus:border-pink-400 focus:ring-pink-300"
+                    className="rounded-lg border-border focus:border-primary focus:ring-primary/30"
                   />
                 </div>
               ))}
 
               {/* Submit */}
-              <Button type="submit" className="w-full rounded-lg bg-primary hover:bg-primary/90 shadow-md" disabled={uploading}>
+              <Button type="submit" className="w-full rounded-lg bg-primary hover:bg-primary/90 shadow-md text-primary-foreground" disabled={uploading}>
                 {uploading ? "Uploading Image..." : "Sign Up"}
               </Button>
 
-              <div className="text-center text-sm text-gray-700">
+              <div className="text-center text-sm text-muted-foreground">
                 Already have an account?{' '}
                 <Link to="/login" className="text-primary hover:underline">
                   Sign in

@@ -9,24 +9,12 @@ export function useInstallPrompt() {
   const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
-  const [hasVisited, setHasVisited] = useState(false);
 
   useEffect(() => {
-    // Check if user has already installed or dismissed
+    // If user already installed or dismissed, don't show
     const hasInstalled = localStorage.getItem('pwa-installed');
     const hasDismissed = localStorage.getItem('pwa-dismissed');
-    
-    if (hasInstalled || hasDismissed) {
-      return;
-    }
-
-    // Set visited flag in localStorage
-    if (!localStorage.getItem('pwa-first-visit')) {
-      localStorage.setItem('pwa-first-visit', Date.now().toString());
-      setHasVisited(false);
-    } else {
-      setHasVisited(true);
-    }
+    if (hasInstalled || hasDismissed) return;
 
     const handleInstallPrompt = (e: BeforeInstallPromptEvent) => {
       console.log('👋 PWA: Install prompt captured');
@@ -35,12 +23,12 @@ export function useInstallPrompt() {
       setIsInstallable(true);
     };
 
-    // Check if it's installable
+    // Try checking for related installed apps where supported
     const checkInstallable = async () => {
-      if (navigator.getInstalledRelatedApps) {
+      if ((navigator as any).getInstalledRelatedApps) {
         try {
-          const relatedApps = await navigator.getInstalledRelatedApps();
-          const isInstalled = relatedApps.length > 0;
+          const relatedApps = await (navigator as any).getInstalledRelatedApps();
+          const isInstalled = relatedApps && relatedApps.length > 0;
           if (isInstalled) {
             localStorage.setItem('pwa-installed', 'true');
             setIsInstallable(false);
@@ -54,17 +42,15 @@ export function useInstallPrompt() {
 
     checkInstallable();
 
-    // Show install prompt after 3 seconds if conditions are met
+    // Show our custom install prompt after 3s if not installed/dismissed
     const timer = setTimeout(() => {
-      if (hasVisited && !localStorage.getItem('pwa-installed')) {
+      if (!localStorage.getItem('pwa-installed') && !localStorage.getItem('pwa-dismissed')) {
         console.log('👋 PWA: Showing install prompt');
         setShowPrompt(true);
       }
     }, 3000);
 
     window.addEventListener('beforeinstallprompt', handleInstallPrompt as any);
-    
-    // Listen for successful installation
     window.addEventListener('appinstalled', () => {
       console.log('👋 PWA: App was installed');
       localStorage.setItem('pwa-installed', 'true');
@@ -76,19 +62,38 @@ export function useInstallPrompt() {
       window.removeEventListener('beforeinstallprompt', handleInstallPrompt as any);
       clearTimeout(timer);
     };
-  }, [hasVisited]);
+  }, []);
 
-    const handleInstallClick = async () => {
-    if (!prompt) return;
+  const handleInstallClick = async () => {
+    if (prompt) {
+      try {
+        const result = await prompt.prompt();
+        if (result.outcome === 'accepted') {
+          setIsInstallable(false);
+          localStorage.setItem('pwa-installed', 'true');
+          setShowPrompt(false);
+        }
+        return;
+      } catch (error) {
+        console.error('Failed to show install prompt:', error);
+      }
+    }
 
+    // Fallback: open Play Store or App Store search for the app name
     try {
-      const result = await prompt.prompt();
-      if (result.outcome === 'accepted') {
-        setIsInstallable(false);
-        localStorage.setItem('pwa-installed', 'true');
+      const ua = navigator.userAgent || '';
+      if (/android/i.test(ua)) {
+        window.open('https://play.google.com/store/search?q=LoveMatch&c=apps', '_blank');
+      } else if (/iphone|ipad|ipod/i.test(ua)) {
+        window.open('https://apps.apple.com/search?term=LoveMatch', '_blank');
+      } else {
+        // Desktop fallback: open manifest or show info page
+        window.open('/manifest.json', '_blank');
       }
     } catch (error) {
-      console.error('Failed to show install prompt:', error);
+      console.error('Failed to open fallback install link', error);
     }
-  };  return { isInstallable, showPrompt, handleInstallClick };
+  };
+
+  return { isInstallable, showPrompt, handleInstallClick, setShowPrompt };
 }

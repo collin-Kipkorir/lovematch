@@ -44,7 +44,7 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="relative flex items-center justify-center min-h-screen bg-gradient-to-br from-pink-100 via-white to-pink-50 px-2 sm:px-4 md:px-6">
+    <div className="relative flex items-center justify-center min-h-screen bg-gradient-hero px-2 sm:px-4 md:px-6">
       {/* Floating Hearts */}
       <motion.div
         className="absolute inset-0 overflow-hidden pointer-events-none"
@@ -55,7 +55,7 @@ const Login: React.FC = () => {
         {[...Array(8)].map((_, i) => (
           <motion.div
             key={i}
-            className="absolute text-pink-400"
+            className="absolute text-romance"
             initial={{ y: 800, opacity: 0 }}
             animate={{
               y: -50,
@@ -80,7 +80,7 @@ const Login: React.FC = () => {
         transition={{ duration: 0.5 }}
         className="w-full max-w-lg" // increased width for better balance
       >
-        <Card className="shadow-xl backdrop-blur-sm bg-white/90 rounded-2xl border border-pink-200">
+        <Card className="shadow-romantic backdrop-blur-sm bg-card/80 rounded-2xl border border-border">
           <CardHeader className="space-y-1 text-center pb-2">
             <motion.div
               initial={{ rotate: 0 }}
@@ -90,10 +90,10 @@ const Login: React.FC = () => {
             >
               <Heart className="h-8 w-8 text-primary drop-shadow-md" />
             </motion.div>
-            <CardTitle className="text-3xl font-semibold text-gray-900">
+            <CardTitle className="text-3xl font-semibold text-foreground">
               Welcome Back 💕
             </CardTitle>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Sign in to continue your love story
             </p>
           </CardHeader>
@@ -101,7 +101,7 @@ const Login: React.FC = () => {
           <CardContent className="px-6 pb-6">
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-gray-900 font-medium">
+                <Label htmlFor="email" className="text-muted-foreground font-medium">
                   Email
                 </Label>
                 <Input
@@ -111,12 +111,12 @@ const Login: React.FC = () => {
                   value={email}
                   onChange={(e) => setEmail(e.target.value.toLowerCase())}
                   required
-                  className="rounded-lg border-pink-200 focus:border-pink-400 focus:ring-pink-300"
+                  className="rounded-lg border-border focus:border-primary focus:ring-primary/30"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-gray-900 font-medium">
+                <Label htmlFor="password" className="text-muted-foreground font-medium">
                   Password
                 </Label>
                 <Input
@@ -126,18 +126,18 @@ const Login: React.FC = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="rounded-lg border-pink-200 focus:border-pink-400 focus:ring-pink-300"
+                  className="rounded-lg border-border focus:border-primary focus:ring-primary/30"
                 />
               </div>
 
               <Button
                 type="submit"
-                className="w-full rounded-lg bg-primary hover:bg-primary/90 shadow-md"
+                className="w-full rounded-lg bg-primary hover:bg-primary/90 shadow-md text-primary-foreground"
               >
                 Sign In
               </Button>
 
-              <div className="text-center text-sm text-gray-700">
+              <div className="text-center text-sm text-muted-foreground">
                 Don’t have an account?{' '}
                 <Link to="/register" className="text-primary hover:underline">
                   Sign up

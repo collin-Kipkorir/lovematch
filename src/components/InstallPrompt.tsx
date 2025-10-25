@@ -3,77 +3,88 @@ import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { Button } from './ui/button';
 import { X } from 'lucide-react';
 
+
 const InstallPrompt = () => {
-  const { isInstallable, showPrompt, handleInstallClick } = useInstallPrompt();
+  const { showPrompt, handleInstallClick, setShowPrompt, isInstallable } = useInstallPrompt();
   const [dismissed, setDismissed] = React.useState(false);
+  const [showManual, setShowManual] = React.useState(false);
 
   const handleDismiss = () => {
     setDismissed(true);
+    setShowPrompt(false);
     localStorage.setItem('pwa-dismissed', 'true');
   };
 
-  // Check if already installed or dismissed
+  // If already installed or dismissed, don't render
   React.useEffect(() => {
     const hasInstalled = localStorage.getItem('pwa-installed');
     const hasDismissed = localStorage.getItem('pwa-dismissed');
     if (hasInstalled || hasDismissed) {
       setDismissed(true);
+      setShowPrompt(false);
     }
-  }, []);
+  }, [setShowPrompt]);
 
-  if (!isInstallable || !showPrompt || dismissed) return null;
+  if (!showPrompt || dismissed) return null;
+
+  // Detect desktop (PC) user agent
+  const isDesktop = typeof window !== 'undefined' && !/android|iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  const handleDownload = async () => {
+    // Try native install prompt first
+    const result = await handleInstallClick();
+    // If not installable and on desktop, show manual instructions
+    if (!isInstallable && isDesktop) {
+      setShowManual(true);
+    }
+  };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 shadow-lg border-t border-gray-200 dark:border-gray-800 z-50 mb-[4.5rem] sm:mb-0">
-      <div className="max-w-xl mx-auto px-4 py-3">
-        <div className="flex items-center space-x-4">
-          {/* App Icon */}
-          <div className="flex-shrink-0">
-            <img 
-              src="/opengraph-image.png" 
-              alt="LoveMatch" 
-              className="w-14 h-14 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700" 
-            />
-          </div>
-          
-          {/* App Info */}
-          <div className="flex-1 min-w-0">
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white truncate">
-              LoveMatch Kenya
-            </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
-              Kenya's #1 Dating App
-            </p>
-            <div className="flex items-center mt-1 space-x-2">
-              <div className="flex items-center">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  ⭐ 4.8
-                </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={handleDismiss} />
+      <div className="relative w-full max-w-md mx-4 bg-card/95 dark:bg-card/95 rounded-2xl shadow-romantic border border-border p-5">
+        <button
+          onClick={handleDismiss}
+          className="absolute top-3 right-3 text-muted-foreground hover:text-foreground p-1"
+          aria-label="Close"
+        >
+          <X />
+        </button>
+
+        <div className="flex items-center gap-4">
+          <img src="/opengraph-image.png" alt="LoveMatch" className="w-16 h-16 rounded-xl shadow-sm border border-border" />
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-lg font-semibold text-foreground">LoveMatch</div>
+                <div className="text-sm text-muted-foreground">Kenya's #1 Dating App</div>
               </div>
-              <span className="text-gray-300 dark:text-gray-600">•</span>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                1M+ installs
-              </span>
+              <div className="text-right">
+                <div className="text-sm text-foreground font-semibold">200K+ Ratings</div>
+                <div className="text-xs text-muted-foreground">5 ★ average</div>
+              </div>
+            </div>
+            <div className="mt-3 flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">200K+ installs</div>
+              <div className="flex items-center gap-2">
+                <Button onClick={handleDownload} className="bg-primary text-primary-foreground">Download</Button>
+              </div>
             </div>
           </div>
-          
-          {/* Action Buttons */}
-          <div className="flex items-center space-x-2">
-            <Button
-              onClick={handleInstallClick}
-              className="bg-pink-600 hover:bg-pink-700 text-white px-4 py-2 rounded-lg font-medium text-sm"
-            >
-              Install
-            </Button>
-            <button
-              onClick={handleDismiss}
-              className="p-2 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400"
-              aria-label="Close"
-            >
-              <X size={20} />
-            </button>
-          </div>
         </div>
+
+        {/* Manual install instructions for desktop */}
+        {showManual && (
+          <div className="mt-6 p-4 rounded-xl bg-muted/40 border border-border">
+            <div className="font-semibold text-lg text-foreground mb-2">How to install LoveMatch on your PC</div>
+            <ol className="list-decimal ml-5 text-muted-foreground text-sm space-y-1">
+              <li>Click the browser's <b>Install</b> or <b>Add to Home Screen</b> button in the address bar (usually a plus icon).</li>
+              <li>If you don't see an install button, open your browser menu and look for <b>Install App</b> or <b>Add to Home Screen</b>.</li>
+              <li>Follow the prompts to add LoveMatch to your device.</li>
+            </ol>
+            <div className="mt-3 text-xs text-muted-foreground">Supported on Chrome, Edge, Brave, and other modern browsers.</div>
+          </div>
+        )}
       </div>
     </div>
   );

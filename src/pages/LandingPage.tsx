@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Heart, Users, MessageCircle } from 'lucide-react';
+import InstallPrompt from '@/components/InstallPrompt';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -253,6 +254,7 @@ const LandingPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <InstallPrompt />
     </div>
   );
 };
