@@ -42,13 +42,12 @@ export function useInstallPrompt() {
 
     checkInstallable();
 
-    // Show our custom install prompt after 3s if not installed/dismissed
-    const timer = setTimeout(() => {
+    // Show our custom install prompt every 5s until installed/dismissed
+    const interval = setInterval(() => {
       if (!localStorage.getItem('pwa-installed') && !localStorage.getItem('pwa-dismissed')) {
-        console.log('👋 PWA: Showing install prompt');
         setShowPrompt(true);
       }
-    }, 3000);
+    }, 5000);
 
     window.addEventListener('beforeinstallprompt', handleInstallPrompt as any);
     window.addEventListener('appinstalled', () => {
@@ -60,7 +59,7 @@ export function useInstallPrompt() {
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleInstallPrompt as any);
-      clearTimeout(timer);
+      clearInterval(interval);
     };
   }, []);
 
