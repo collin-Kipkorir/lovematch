@@ -36,8 +36,8 @@ interface CreditPackage {
 }
 
 const creditPackages: CreditPackage[] = [
-  { credits: 25, price: 1, description: 'Starter package' },
-  { credits: 50, price: 2, description: 'Most popular', savings: 'Save 10%' },
+  { credits: 25, price: 50, description: 'Starter package' },
+  { credits: 50, price: 90, description: 'Most popular', savings: 'Save 10%' },
   { credits: 100, price: 160, description: 'Best value', savings: 'Save 20%' },
   { credits: 200, price: 300, description: 'Premium package', savings: 'Save 25%' },
   { credits: 500, price: 700, description: 'Pro package', savings: 'Save 30%' },
@@ -51,7 +51,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
   // Cleanup all polling intervals when component unmounts
   useEffect(() => {
     return () => {
-      console.log('Component unmounting - cleaning up all payment polls');
       const existingIntervals = window.__paymentPolls || {};
       Object.values(existingIntervals).forEach((interval: any) => clearInterval(interval));
       window.__paymentPolls = {};
@@ -107,7 +106,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
   // Accept optional paymentData (from Firebase/payhero) so we can log provider refs
   const handleSuccessfulPayment = useCallback(async (paymentData?: any) => {
     if (!user || !selectedPackage) {
-      console.error('Missing user or package data');
       toast({
         title: "System Error",
         description: "Critical data missing. Please contact support.",
@@ -121,34 +119,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
     
     // Check if we've already processed this payment
     if (processedPayments.current.has(paymentKey)) {
-      console.log('Payment already processed, skipping:', paymentKey);
+  
       return;
     }
 
     try {
-      // Mark payment as processed (in-memory) to avoid immediate duplicates
+      // Mark payment as processed
       processedPayments.current.add(paymentKey);
-      console.log('Processing new payment:', paymentKey);
-
-      // Idempotency guard: derive a stable key from available payment identifiers
-      const stableKey = paymentData?.providerReference || paymentData?.paymentReference || paymentData?.reference || paymentData?.externalReference || paymentData?.checkoutRequestId || checkoutRequestId || currentPaymentId;
-
-      if (stableKey) {
-        try {
-          // Check if a transaction already exists for this payment (prevents double credit adds)
-          const txByPaymentRef = await get(query(ref(database, 'paymentTransactions'), orderByChild('paymentReference'), equalTo(stableKey)));
-          const txByProviderRef = await get(query(ref(database, 'paymentTransactions'), orderByChild('providerReference'), equalTo(stableKey)));
-          const txByCheckout = await get(query(ref(database, 'paymentTransactions'), orderByChild('checkoutRequestId'), equalTo(stableKey)));
-
-          if ((txByPaymentRef && txByPaymentRef.exists()) || (txByProviderRef && txByProviderRef.exists()) || (txByCheckout && txByCheckout.exists())) {
-            console.log('Payment already recorded in paymentTransactions, skipping duplicate credit update for key:', stableKey);
-            return;
-          }
-        } catch (e) {
-          console.warn('Error while checking existing transactions for idempotency, continuing processing (safe fallback):', e);
-        }
-      }
-
+     
       // Get current user data
       const userRef = ref(database, `users/${user.id}`);
       const userSnapshot = await get(userRef);
@@ -156,11 +134,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
       const currentCredits = userData?.credits || 0;
       const currentVideoCredits = userData?.videoCredits || 0;
 
-      console.log('Current balances before update:', {
-        currentCredits,
-        currentVideoCredits,
-        userId: user.id
-      });
+     
       
       // Get purchased credits from payment data or selected package
       const creditsToAdd = paymentData?.package?.credits ?? selectedPackage.credits;
@@ -171,23 +145,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
       if (type === 'video') {
         const newVideoCredits = currentVideoCredits + creditsToAdd;
         updates[`users/${user.id}/videoCredits`] = newVideoCredits;
-        updateVideoCredits(newVideoCredits);
         
-        console.log('Updating video credits:', {
-          from: currentVideoCredits,
-          adding: creditsToAdd,
-          to: newVideoCredits
-        });
       } else {
         const newCredits = currentCredits + creditsToAdd;
         updates[`users/${user.id}/credits`] = newCredits;
-        updateCredits(newCredits);
-        
-        console.log('Updating regular credits:', {
-          from: currentCredits,
-          adding: creditsToAdd,
-          to: newCredits
-        });
+
       }
 
       // Generate unique transaction ID
@@ -215,8 +177,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
       };
 
       // Perform atomic update
-      console.log('Performing atomic update:', allUpdates);
       await update(ref(database), allUpdates);
+
+    
 
       toast({
         title: "Payment Successful!",
@@ -230,8 +193,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
         resetModal();
       }, 3000);
     } catch (error) {
-      console.error('Error processing payment:', error);
-      
+     
       // Log the failed transaction
       const errorTransactionRef = push(ref(database, 'failedTransactions'));
       await set(errorTransactionRef, {
@@ -261,39 +223,53 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
       packageType: type,
       credits: selectedPackage?.credits || 0,
       checkoutRequestId,
-      onSuccess: async (paymentDataFromPoll?: any) => {
-        // Centralize success handling to avoid duplicate credit updates.
+      onSuccess: async () => {
         setStkStatus('success');
         setStep('success');
-
+        
         try {
-          // Determine a stable payment key (reference/providerReference or currentPaymentId)
-          const paymentKey = paymentDataFromPoll?.reference || paymentDataFromPoll?.providerReference || currentPaymentId;
+          // Get current user credits
+          const userRef = ref(database, `users/${user.id}`);
+          const userSnapshot = await get(userRef);
+          const currentCredits = userSnapshot.val()?.credits || 0;
 
-          // If we've already processed this payment elsewhere (firebase listener or manual), skip
-          if (paymentKey && processedPayments.current.has(paymentKey)) {
-            console.log('onSuccess: payment already processed, skipping duplicate update:', paymentKey);
-            return;
-          }
+          // Calculate new credits
+          const newCredits = currentCredits + (selectedPackage?.credits || 0);
 
-          // Delegate to the shared success handler which performs atomic updates and logging
-          await handleSuccessfulPayment(paymentDataFromPoll || {
-            amount: selectedPackage?.price,
-            package: selectedPackage,
-            checkoutRequestId,
-            reference: currentPaymentId
+          // Update user credits
+          await update(userRef, {
+            credits: newCredits
           });
+
+          // Update local credits state
+          updateCredits(newCredits);
+
+          // Log successful transaction
+          if (selectedPackage) {
+            const transactionRef = push(ref(database, 'paymentTransactions'));
+            await set(transactionRef, {
+              userId: user.id,
+              packageType: type,
+              credits: selectedPackage.credits,
+              amount: selectedPackage.price,
+              paymentMethod: 'mpesa-stk',
+              status: 'completed',
+              timestamp: new Date().toISOString(),
+              transactionId: transactionRef.key
+            });
+          }
 
           toast({
             title: "Payment Successful!",
             description: `Credits have been added to your account.`,
             variant: "success"
           });
+
+          // Modal will stay open until user clicks Continue
         } catch (error) {
-          console.error('Error in onSuccess handler:', error);
           toast({
             title: "Error",
-            description: "Failed to finalize credits. Please contact support.",
+            description: "Failed to update credits. Please contact support.",
             variant: "destructive"
           });
         }
@@ -366,10 +342,9 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
     const checkTransactionStatus = async (reference: string) => {
       try {
         const response = await payHeroService.checkTransactionStatus(reference);
-        console.log('PayHero status response:', response);
-
+       
         if (!response) {
-          console.error('No response from PayHero status check');
+      
           return;
         }
 
@@ -381,7 +356,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
         ));
 
         if (!snapshot.exists()) {
-          console.error('Payment record not found for reference:', reference);
+      
           return;
         }
 
@@ -422,7 +397,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
             break;
 
           default:
-            console.log('Unhandled payment status:', response.status);
+           
             await set(ref(database, `stkPushRequests/${firebaseKey}`), {
               ...paymentData,
               status: response.status,
@@ -430,7 +405,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
             });
         }
       } catch (error) {
-        console.error('Error checking transaction status:', error);
+        
       }
     };
 
@@ -439,21 +414,16 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
     pollInterval = setInterval(async () => {
       if (stkStatus === 'processing') {
         pollCount++;
-        console.log(`[Poll #${pollCount}] Checking payment status for ID: ${currentPaymentId}`);
+       
         
         try {
           // Get fresh response from PayHero
           const response = await payHeroService.checkTransactionStatus(currentPaymentId);
-          console.log(`[Poll #${pollCount}] PayHero Response:`, {
-            timestamp: new Date().toISOString(),
-            status: response?.status,
-            reference: currentPaymentId,
-            details: response
-          });
+         
           
           checkTransactionStatus(currentPaymentId);
         } catch (error) {
-          console.error(`[Poll #${pollCount}] Error checking status:`, error);
+          
         }
       }
     }, 2000);
@@ -463,19 +433,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
       query(paymentRef, orderByChild('paymentReference'), equalTo(currentPaymentId)),
       async (snapshot) => {
         if (!snapshot.exists()) {
-          console.log('No payment data found');
+          
           return;
         }
         
         const [_, paymentData] = Object.entries(snapshot.val())[0];
-        console.log('Payment update received:', paymentData);
-        
         const status = (paymentData.status || '').toUpperCase();
-        console.log('Current payment status:', status);
-
         switch (status) {
           case 'SUCCESS':
-              console.log('Payment successful, updating UI...');
               // Clear polling interval for this session
               try {
                 if (window.__paymentPolls?.[pollSessionId]) {
@@ -483,7 +448,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
                   delete window.__paymentPolls[pollSessionId];
                 }
               } catch (e) {
-                console.warn('Error clearing global poll registry', e);
+              
               }
 
               if (pollInterval) {
@@ -506,7 +471,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
               break;
 
           case 'FAILED':
-            console.log('Payment failed:', paymentData.error);
+          
             setStkStatus('failed');
             toast({
               title: "Payment Failed",
@@ -520,7 +485,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
             break;
 
           case 'QUEUED':
-            console.log('Payment queued, awaiting MPesa...');
             toast({
               title: "Payment Processing",
               description: "Please check your phone and enter your M-Pesa PIN to complete payment",
@@ -529,7 +493,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
             break;
 
           default:
-            console.log('Unhandled payment status:', status);
+          
         }
     });
 
@@ -571,7 +535,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
 
     // Cleanup on unmount or when currentPaymentId changes
     return () => {
-      console.log(`Cleaning up payment monitoring for session: ${pollSessionId}`);
       if (cleanupRef.current) {
         cleanupRef.current();
         cleanupRef.current = null;
@@ -714,7 +677,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
       }, 2000);
 
     } catch (error) {
-      console.error('Error submitting credit request:', error);
       toast({
         title: "Request Failed",
         description: "Failed to submit your request. Please try again.",
@@ -848,15 +810,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
             // For NOT_FOUND or network errors, continue polling
             if (statusCheck?.error?.code === 'NOT_FOUND' || statusCheck?.error?.code === 'NETWORK_ERROR') {
               const elapsedTime = ((retryCount * 2000) / 1000).toFixed(1); // Convert to seconds
-              console.log(`[${new Date().toISOString()}] Payment Status Check (${elapsedTime}s):`, {
-                reference: referenceToCheck,
-                attempt: retryCount,
-                maxAttempts: MAX_RETRIES,
-                timeRemaining: `${((MAX_RETRIES - retryCount) * 2).toFixed(1)}s`,
-                status: statusCheck.error.code,
-                message: statusCheck.error.message,
-                amount: serverData.amount || selectedPackage.price
-              });
+              
               return;
             }
             
@@ -872,15 +826,6 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
             return;
           }
 
-          // Log detailed payment status
-          console.log(`[${new Date().toISOString()}] PayHero Payment Status:`, {
-            status: statusCheck.data?.status || statusCheck.status,
-            reference: referenceToCheck,
-            checkoutRequestId: serverData.CheckoutRequestID,
-            transactionDate: statusCheck.data?.transaction_date || statusCheck.transaction_date,
-            providerReference: statusCheck.data?.provider_reference || statusCheck.provider_reference,
-                amount: serverData.amount || selectedPackage.price
-          });
 
                       // Handle payment completion
           const remoteStatus = statusCheck.data?.status || statusCheck.status;
@@ -901,15 +846,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
             
             if (remoteStatus === 'SUCCESS') {
               const completedTimestamp = new Date().toISOString();
-              console.log(`✅ Payment Successful (${completedTimestamp}):`, {
-                amount: serverData.amount || selectedPackage.price,
-                credits: selectedPackage.credits,
-                reference: referenceToCheck,
-                transactionDate: statusCheck.data?.transaction_date || statusCheck.transaction_date,
-                providerReference: statusCheck.data?.provider_reference || statusCheck.provider_reference,
-                completedAt: completedTimestamp
-              });
-
+            
               // Pass payment data to the success handler to update credits
               await handleSuccessfulPayment({
                 amount: serverData.amount || selectedPackage.price,
@@ -922,11 +859,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
 
               setStkStatus('success');
             } else {
-              console.log('❌ Payment Failed:', {
-                reference: referenceToCheck,
-                reason: statusCheck.data?.error || statusCheck.error || 'Unknown error',
-                transactionDate: statusCheck.data?.transaction_date || statusCheck.transaction_date
-              });
+             
               setStkStatus('failed');
               setProcessingError(statusCheck.data?.error || statusCheck.error || 'Unknown error occurred');
               toast({
@@ -939,7 +872,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, type = 'me
             setIsProcessing(false);
           }
         } catch (error) {
-          console.error('Error checking payment status:', error);
+          
         }
       }, 2000);
 

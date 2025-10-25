@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { payHeroService } from '@/lib/payhero-service';
-import { ref, update, get } from 'firebase/database';
+import { ref, get } from 'firebase/database';
 import { database } from '@/lib/firebase';
 
 interface UsePaymentPollingOptions {
@@ -62,47 +62,10 @@ export function usePaymentPolling(paymentId: string | null, options: UsePaymentP
     }
   };
 
-  const updateUserCredits = async () => {
-    try {
-      const { userId } = options;
-      // Get current user data
-      const userRef = ref(database, userId);
-      const userSnap = await get(userRef);
-      const userData = userSnap.val();
-
-      const currentCredits = userData?.credits || 0;
-      const currentVideoCredits = userData?.videoCredits || 0;
-
-      // Prepare update based on package type
-      const updates: any = {};
-      
-      if (options.packageType === 'video') {
-        updates[`${userId}/videoCredits`] = currentVideoCredits + options.credits;
-      } else if (options.packageType === 'message') {
-        updates[`${userId}/credits`] = currentCredits + options.credits;
-      } else if (options.packageType === 'premium') {
-        updates[`${userId}/credits`] = currentCredits + options.credits;
-        updates[`${userId}/videoCredits`] = currentVideoCredits + 5; // 5 video credits for premium
-      }
-
-      // Update credits atomically
-      await update(ref(database), updates);
-
-      console.log('Credits updated successfully:', {
-        userId: userId,
-        packageType: options.packageType,
-        credits: options.credits,
-        timestamp: new Date().toISOString(),
-        oldCredits: currentCredits,
-        newCredits: currentCredits + options.credits
-      });
-
-      return true;
-    } catch (error) {
-      console.error('Error updating credits:', error);
-      return false;
-    }
-  };
+  // NOTE: credit application must be performed by the caller via the
+  // provided onSuccess callback. This hook only polls payment status
+  // and delegates side-effects to the caller to allow centralized
+  // idempotent handling (transactions / processedPayments locks).
 
   useEffect(() => {
     if (!paymentId) {
@@ -163,19 +126,20 @@ export function usePaymentPolling(paymentId: string | null, options: UsePaymentP
         // Update message based on status
         switch (response.status) {
           case 'SUCCESS':
-            await updateUserCredits();
+            // Delegate application of credits/payment side-effects to caller
             cleanup();
             setStatus('success');
             onSuccess?.();
             break;
-          
-          case 'FAILED':
+
+          case 'FAILED': {
             cleanup();
             setStatus('failed');
             const errorMessage = response.error?.message || 'Payment failed';
             setError(errorMessage);
             onError?.(errorMessage);
             break;
+          }
           
           case 'QUEUED':
             if (elapsed >= 30) {
