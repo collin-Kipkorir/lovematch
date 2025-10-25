@@ -9,6 +9,7 @@ export function useInstallPrompt() {
   const [prompt, setPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
     // If user already installed or dismissed, don't show
@@ -54,7 +55,9 @@ export function useInstallPrompt() {
       console.log('👋 PWA: App was installed');
       localStorage.setItem('pwa-installed', 'true');
       setIsInstallable(false);
-      setShowPrompt(false);
+      setIsInstalled(true);
+      // keep the prompt visible so the UI can show Open button
+      setShowPrompt(true);
     });
 
     return () => {
@@ -70,9 +73,10 @@ export function useInstallPrompt() {
         if (result.outcome === 'accepted') {
           setIsInstallable(false);
           localStorage.setItem('pwa-installed', 'true');
-          setShowPrompt(false);
+          setIsInstalled(true);
+          // keep prompt visible so component can show Open button
         }
-        return;
+        return result.outcome === 'accepted';
       } catch (error) {
         console.error('Failed to show install prompt:', error);
       }
@@ -94,5 +98,11 @@ export function useInstallPrompt() {
     }
   };
 
-  return { isInstallable, showPrompt, handleInstallClick, setShowPrompt };
+  // Initialize installed state from localStorage
+  useEffect(() => {
+    const hasInstalled = localStorage.getItem('pwa-installed');
+    if (hasInstalled) setIsInstalled(true);
+  }, []);
+
+  return { isInstallable, showPrompt, handleInstallClick, setShowPrompt, isInstalled };
 }
