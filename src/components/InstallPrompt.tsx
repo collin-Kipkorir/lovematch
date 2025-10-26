@@ -108,42 +108,47 @@ const InstallPrompt = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={handleDismiss} />
-      <div ref={modalRef} tabIndex={-1} className="relative w-full max-w-md mx-4 bg-card/95 dark:bg-card/95 rounded-2xl shadow-romantic border border-border p-5">
+      <div className="absolute inset-0 bg-black/40" />
+      <div ref={modalRef} tabIndex={-1} className="relative w-full max-w-md mx-4 bg-background/95 backdrop-blur-sm dark:bg-card/95 rounded-3xl shadow-2xl border border-border/30 p-6">
         <button
           onClick={handleDismiss}
-          className="absolute top-3 right-3 text-muted-foreground hover:text-foreground p-2 rounded-full"
+          className="absolute top-4 right-4 text-muted-foreground/70 hover:text-foreground hover:bg-muted/50 p-2 rounded-full transition-colors"
           aria-label="Dismiss install prompt"
         >
-          <X />
+          <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-4">
-          <img src="/opengraph-image.png" alt="LoveMatch" className="w-16 h-16 rounded-xl shadow-sm border border-border" />
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
+        <div className="flex items-start gap-5">
+          <img src="/opengraph-image.png" alt="LoveMatch" className="w-20 h-20 rounded-2xl shadow-md border border-border/50 object-cover" />
+          <div className="flex-1 pt-1">
+            <div className="flex items-start justify-between">
               <div>
-                <div className="text-lg font-semibold text-foreground">LoveMatch</div>
-                <div className="text-sm text-muted-foreground">Kenya's #1 Dating App</div>
+                <div className="text-xl font-bold text-foreground tracking-tight">LoveMatch</div>
+                <div className="text-sm font-medium text-muted-foreground/90 mt-0.5">Kenya's #1 Dating App</div>
               </div>
               <div className="text-right">
-                <div className="text-sm text-foreground font-semibold">200K+ Ratings</div>
-                <div className="text-xs text-muted-foreground">5 ★ average</div>
+                <div className="text-sm font-semibold text-foreground/90">200K+ Ratings</div>
+                <div className="text-xs font-medium text-primary mt-0.5">5 ★ average</div>
               </div>
             </div>
-            <div className="mt-3 flex items-center justify-between">
-              <div className="text-sm text-muted-foreground">200K+ installs</div>
-              <div className="flex items-center gap-2">
+            <div className="mt-4 flex items-center justify-between">
+              <div className="text-sm font-medium text-muted-foreground/75">200K+ installs</div>
+              <div className="flex items-center gap-3">
                 {!isInstalled ? (
                   <>
-                    <Button onClick={handleDownload} className="bg-primary text-primary-foreground flex items-center justify-center" disabled={installing} aria-live={installing ? 'polite' : undefined}>
+                    <Button 
+                      onClick={handleDownload} 
+                      className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 flex items-center justify-center px-6 h-10 rounded-xl transition-all" 
+                      disabled={installing} 
+                      aria-live={installing ? 'polite' : undefined}
+                    >
                       {installing ? (
                         <span className="inline-flex items-center" role="status" aria-live="polite">
-                          <span className="mr-2 text-sm">Installing</span>
+                          <span className="mr-2 text-sm font-medium">Installing</span>
                           <span className="flex items-center space-x-1">
-                            <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse" />
-                            <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse" />
-                            <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse" />
+                            <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse delay-0" />
+                            <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse delay-150" />
+                            <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse delay-300" />
                           </span>
                         </span>
                       ) : (
@@ -151,23 +156,34 @@ const InstallPrompt = () => {
                         )}
                     </Button>
 
-                    <Button variant="ghost" onClick={() => {
-                      // snooze for 1 hour
-                      const until = Date.now() + 60 * 60 * 1000;
-                      try { localStorage.setItem('pwa-snoozed', String(until)); } catch (e) { console.error('Failed to set snooze', e); }
-                      setShowPrompt(false);
-                    }} className="ml-2">
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => {
+                        // snooze for 1 hour
+                        const until = Date.now() + 60 * 60 * 1000;
+                        try { localStorage.setItem('pwa-snoozed', String(until)); } catch (e) { console.error('Failed to set snooze', e); }
+                        setShowPrompt(false);
+                      }} 
+                      className="text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    >
                       Snooze 1h
                     </Button>
-                    <Button variant="ghost" onClick={() => {
-                      // Just dismiss modal - will reappear on next interval
-                      setShowPrompt(false);
-                    }} className="ml-2">
+                    <Button 
+                      variant="ghost" 
+                      onClick={() => {
+                        // Just dismiss modal - will reappear on next interval
+                        setShowPrompt(false);
+                      }}
+                      className="text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    >
                       Try Again
                     </Button>
                   </>
                 ) : (
-                  <Button onClick={() => { window.open('/', '_self'); setShowPrompt(false); }} className="bg-primary text-primary-foreground">
+                  <Button 
+                    onClick={() => { window.open('/', '_self'); setShowPrompt(false); }} 
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 px-6 h-10 rounded-xl transition-all"
+                  >
                     Open
                   </Button>
                 )}
