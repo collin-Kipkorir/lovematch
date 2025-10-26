@@ -17,12 +17,6 @@ const InstallPrompt = () => {
   }, [setShowPrompt]);
 
   const handleDismiss = () => {
-    // mark dismissed so prompt won't reappear
-    try {
-      localStorage.setItem('pwa-dismissed', 'true');
-    } catch (e) {
-      /* ignore */
-    }
     setShowPrompt(false);
   };
   // Detect desktop (PC) user agent
@@ -91,19 +85,8 @@ const InstallPrompt = () => {
 
   const handleDownload = async () => {
     setInstalling(true);
-    // Try native install prompt first (returns true if accepted)
-    const accepted = await handleInstallClick();
+    await handleInstallClick();
     setInstalling(false);
-
-    // If accepted or already installed, the hook will set isInstalled
-    if (isInstalled) return;
-
-    // If not installable (no native prompt), just stop the installing state.
-    // We intentionally do not redirect to any app store — install remains PWA-only.
-    if (!isInstallable) {
-      setInstalling(false);
-      return;
-    }
   };
 
   return (
@@ -135,56 +118,31 @@ const InstallPrompt = () => {
               <div className="text-sm font-medium text-muted-foreground/75">200K+ installs</div>
               <div className="flex items-center gap-3">
                 {!isInstalled ? (
-                  <>
-                    <Button 
-                      onClick={handleDownload} 
-                      className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 flex items-center justify-center px-6 h-10 rounded-xl transition-all" 
-                      disabled={installing} 
-                      aria-live={installing ? 'polite' : undefined}
-                    >
-                      {installing ? (
-                        <span className="inline-flex items-center" role="status" aria-live="polite">
-                          <span className="mr-2 text-sm font-medium">Installing</span>
-                          <span className="flex items-center space-x-1">
-                            <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse delay-0" />
-                            <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse delay-150" />
-                            <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse delay-300" />
-                          </span>
+                  <Button 
+                    onClick={handleDownload} 
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 flex items-center justify-center px-8 h-11 rounded-xl transition-all w-full sm:w-auto" 
+                    disabled={installing} 
+                    aria-live={installing ? 'polite' : undefined}
+                  >
+                    {installing ? (
+                      <span className="inline-flex items-center" role="status" aria-live="polite">
+                        <span className="mr-2 text-sm font-medium">Installing</span>
+                        <span className="flex items-center space-x-1">
+                          <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse delay-0" />
+                          <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse delay-150" />
+                          <span className="w-1.5 h-1.5 bg-primary-foreground rounded-full animate-pulse delay-300" />
                         </span>
-                      ) : (
-                          'Install'
-                        )}
-                    </Button>
-
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => {
-                        // snooze for 1 hour
-                        const until = Date.now() + 60 * 60 * 1000;
-                        try { localStorage.setItem('pwa-snoozed', String(until)); } catch (e) { console.error('Failed to set snooze', e); }
-                        setShowPrompt(false);
-                      }} 
-                      className="text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                    >
-                      Snooze 1h
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => {
-                        // Just dismiss modal - will reappear on next interval
-                        setShowPrompt(false);
-                      }}
-                      className="text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                    >
-                      Try Again
-                    </Button>
-                  </>
+                      </span>
+                    ) : (
+                      <span className="text-base font-medium">Install App</span>
+                    )}
+                  </Button>
                 ) : (
                   <Button 
                     onClick={() => { window.open('/', '_self'); setShowPrompt(false); }} 
-                    className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 px-6 h-10 rounded-xl transition-all"
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 px-8 h-11 rounded-xl transition-all"
                   >
-                    Open
+                    <span className="text-base font-medium">Open</span>
                   </Button>
                 )}
               </div>
