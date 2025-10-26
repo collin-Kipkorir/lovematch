@@ -16,10 +16,40 @@ const InstallPrompt = () => {
 
   const handleDismiss = () => setShowPrompt(false);
 
+  const showInstallNotification = async () => {
+    if (!('Notification' in window)) return;
+    
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        const notification = new Notification('LoveMatch Installed! 💖', {
+          body: 'Click to open your new dating experience',
+          icon: '/opengraph-image.png',
+          badge: '/opengraph-image.png',
+          tag: 'lovematch-installed',
+          timestamp: Date.now(),
+          requireInteraction: true
+        });
+
+        notification.onclick = () => {
+          window.open('/', '_self');
+          notification.close();
+        };
+      }
+    } catch (error) {
+      console.error('Error showing notification:', error);
+    }
+  };
+
   const handleDownload = async () => {
     setInstalling(true);
-    await handleInstallClick();
+    const installed = await handleInstallClick();
     setInstalling(false);
+    
+    if (installed) {
+      localStorage.setItem('pwa-installed', 'true');
+      await showInstallNotification();
+    }
   };
 
   // Accessibility: trap focus & block Esc
