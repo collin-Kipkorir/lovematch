@@ -88,8 +88,8 @@ const InstallPrompt = () => {
     // If accepted or already installed, the hook will set isInstalled
     if (isInstalled) return;
 
-    // If not installable (no native prompt) and on desktop, show manual instructions
-    if (!isInstallable && isDesktop) {
+    // If not installable (no native prompt), show manual instructions (no store redirects)
+    if (!isInstallable) {
       setShowManual(true);
       setInstalling(false);
     }

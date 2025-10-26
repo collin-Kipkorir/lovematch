@@ -82,20 +82,9 @@ export function useInstallPrompt() {
       }
     }
 
-    // Fallback: open Play Store or App Store search for the app name
-    try {
-      const ua = navigator.userAgent || '';
-      if (/android/i.test(ua)) {
-        window.open('https://play.google.com/store/search?q=LoveMatch&c=apps', '_blank');
-      } else if (/iphone|ipad|ipod/i.test(ua)) {
-        window.open('https://apps.apple.com/search?term=LoveMatch', '_blank');
-      } else {
-        // Desktop fallback: open manifest or show info page
-        window.open('/manifest.json', '_blank');
-      }
-    } catch (error) {
-      console.error('Failed to open fallback install link', error);
-    }
+    // No store redirects: fallback to manual instructions handled by the UI.
+    // Return false so caller can show manual install instructions instead.
+    return false;
   };
 
   // Initialize installed state from localStorage
