@@ -1,6 +1,7 @@
 import React from 'react';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { Button } from './ui/button';
+import { X } from 'lucide-react';
 
 
 const InstallPrompt = () => {
@@ -15,6 +16,17 @@ const InstallPrompt = () => {
       setShowPrompt(false);
     }
   }, [setShowPrompt]);
+
+  const handleDismiss = () => {
+    // mark dismissed so prompt won't reappear
+    try {
+      localStorage.setItem('pwa-dismissed', 'true');
+    } catch (e) {
+      /* ignore */
+    }
+    setShowPrompt(false);
+    setShowManual(false);
+  };
   // Detect desktop (PC) user agent
   const isDesktop = typeof window !== 'undefined' && !/android|iphone|ipad|ipod/i.test(navigator.userAgent);
 
@@ -97,8 +109,15 @@ const InstallPrompt = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-  <div className="absolute inset-0 bg-black/40" />
-  <div ref={modalRef} tabIndex={-1} className="relative w-full max-w-md mx-4 bg-card/95 dark:bg-card/95 rounded-2xl shadow-romantic border border-border p-5">
+      <div className="absolute inset-0 bg-black/40" onClick={handleDismiss} />
+      <div ref={modalRef} tabIndex={-1} className="relative w-full max-w-md mx-4 bg-card/95 dark:bg-card/95 rounded-2xl shadow-romantic border border-border p-5">
+        <button
+          onClick={handleDismiss}
+          className="absolute top-3 right-3 text-muted-foreground hover:text-foreground p-2 rounded-full"
+          aria-label="Dismiss install prompt"
+        >
+          <X />
+        </button>
 
         <div className="flex items-center gap-4">
           <img src="/opengraph-image.png" alt="LoveMatch" className="w-16 h-16 rounded-xl shadow-sm border border-border" />
@@ -117,20 +136,32 @@ const InstallPrompt = () => {
               <div className="text-sm text-muted-foreground">200K+ installs</div>
               <div className="flex items-center gap-2">
                 {!isInstalled ? (
-                  <Button onClick={handleDownload} className="bg-primary text-primary-foreground flex items-center justify-center" disabled={installing} aria-live={installing ? 'polite' : undefined}>
-                    {installing ? (
-                      <span className="inline-flex items-center" role="status" aria-live="polite">
-                        <span className="mr-2 text-sm">Installing</span>
-                        <span className="flex items-center space-x-1">
-                          <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse" style={{ animationDelay: '0s' }} />
-                          <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse" style={{ animationDelay: '0.15s' }} />
-                          <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse" style={{ animationDelay: '0.3s' }} />
+                  <>
+                    <Button onClick={handleDownload} className="bg-primary text-primary-foreground flex items-center justify-center" disabled={installing} aria-live={installing ? 'polite' : undefined}>
+                      {installing ? (
+                        <span className="inline-flex items-center" role="status" aria-live="polite">
+                          <span className="mr-2 text-sm">Installing</span>
+                          <span className="flex items-center space-x-1">
+                            <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse" />
+                            <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse" />
+                            <span className="w-2 h-2 bg-primary-foreground rounded-full animate-pulse" />
+                          </span>
                         </span>
-                      </span>
-                    ) : (
-                      'Download'
-                    )}
-                  </Button>
+                      ) : (
+                        'Download'
+                      )}
+                    </Button>
+
+                    <Button variant="ghost" onClick={() => {
+                      // snooze for 1 hour
+                      const until = Date.now() + 60 * 60 * 1000;
+                      try { localStorage.setItem('pwa-snoozed', String(until)); } catch (e) { console.error('Failed to set snooze', e); }
+                      setShowPrompt(false);
+                      setShowManual(false);
+                    }} className="ml-2">
+                      Snooze 1h
+                    </Button>
+                  </>
                 ) : (
                   <Button onClick={() => { window.open('/', '_self'); setShowPrompt(false); }} className="bg-primary text-primary-foreground">
                     Open

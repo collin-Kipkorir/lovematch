@@ -12,23 +12,26 @@ export function useInstallPrompt() {
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    // If user already installed or dismissed, don't show
+    // If user already installed, dismissed, or snoozed, don't show
     const hasInstalled = localStorage.getItem('pwa-installed');
     const hasDismissed = localStorage.getItem('pwa-dismissed');
-    if (hasInstalled || hasDismissed) return;
+    const snoozedUntil = Number(localStorage.getItem('pwa-snoozed') || '0');
+    const now = Date.now();
+    if (hasInstalled || hasDismissed || (snoozedUntil && now < snoozedUntil)) return;
 
-    const handleInstallPrompt = (e: BeforeInstallPromptEvent) => {
+    const handleInstallPrompt = (e: Event) => {
+      const ev = e as BeforeInstallPromptEvent;
       console.log('👋 PWA: Install prompt captured');
-      e.preventDefault();
-      setPrompt(e);
+      ev.preventDefault();
+      setPrompt(ev);
       setIsInstallable(true);
     };
 
     // Try checking for related installed apps where supported
     const checkInstallable = async () => {
-      if ((navigator as any).getInstalledRelatedApps) {
-        try {
-          const relatedApps = await (navigator as any).getInstalledRelatedApps();
+      if ((navigator as unknown as any).getInstalledRelatedApps) {
+          try {
+            const relatedApps = await (navigator as unknown as any).getInstalledRelatedApps();
           const isInstalled = relatedApps && relatedApps.length > 0;
           if (isInstalled) {
             localStorage.setItem('pwa-installed', 'true');
@@ -43,14 +46,18 @@ export function useInstallPrompt() {
 
     checkInstallable();
 
-    // Show our custom install prompt every 5s until installed/dismissed
+    // Show our custom install prompt every 5s until installed/dismissed/snoozed
     const interval = setInterval(() => {
-      if (!localStorage.getItem('pwa-installed') && !localStorage.getItem('pwa-dismissed')) {
+      const installed = localStorage.getItem('pwa-installed');
+      const dismissed = localStorage.getItem('pwa-dismissed');
+      const snoozed = Number(localStorage.getItem('pwa-snoozed') || '0');
+      const now = Date.now();
+      if (!installed && !dismissed && !(snoozed && now < snoozed)) {
         setShowPrompt(true);
       }
     }, 5000);
 
-    window.addEventListener('beforeinstallprompt', handleInstallPrompt as any);
+  window.addEventListener('beforeinstallprompt', handleInstallPrompt as EventListener);
     window.addEventListener('appinstalled', () => {
       console.log('👋 PWA: App was installed');
       localStorage.setItem('pwa-installed', 'true');
@@ -61,7 +68,7 @@ export function useInstallPrompt() {
     });
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleInstallPrompt as any);
+      window.removeEventListener('beforeinstallprompt', handleInstallPrompt as EventListener);
       clearInterval(interval);
     };
   }, []);
