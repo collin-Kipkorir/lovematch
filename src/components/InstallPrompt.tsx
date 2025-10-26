@@ -6,7 +6,6 @@ import { X } from 'lucide-react';
 
 const InstallPrompt = () => {
   const { showPrompt, handleInstallClick, setShowPrompt, isInstallable, isInstalled } = useInstallPrompt();
-  const [showManual, setShowManual] = React.useState(false);
   const [installing, setInstalling] = React.useState(false);
 
   // If already installed, don't render
@@ -25,7 +24,6 @@ const InstallPrompt = () => {
       /* ignore */
     }
     setShowPrompt(false);
-    setShowManual(false);
   };
   // Detect desktop (PC) user agent
   const isDesktop = typeof window !== 'undefined' && !/android|iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -43,7 +41,7 @@ const InstallPrompt = () => {
     const getFocusable = () => Array.from(modalEl.querySelectorAll<HTMLElement>(focusableSelector))
       .filter(el => !el.hasAttribute('disabled') && el.offsetParent !== null);
 
-    // Put initial focus on the first focusable element (Download button)
+  // Put initial focus on the first focusable element (Install button)
     const focusable = getFocusable();
     if (focusable.length) {
       focusable[0].focus();
@@ -87,7 +85,7 @@ const InstallPrompt = () => {
 
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [showPrompt, showManual]);
+  }, [showPrompt]);
 
   if (!showPrompt) return null;
 
@@ -100,10 +98,11 @@ const InstallPrompt = () => {
     // If accepted or already installed, the hook will set isInstalled
     if (isInstalled) return;
 
-    // If not installable (no native prompt), show manual instructions (no store redirects)
+    // If not installable (no native prompt), just stop the installing state.
+    // We intentionally do not redirect to any app store — install remains PWA-only.
     if (!isInstallable) {
-      setShowManual(true);
       setInstalling(false);
+      return;
     }
   };
 
@@ -148,8 +147,8 @@ const InstallPrompt = () => {
                           </span>
                         </span>
                       ) : (
-                        'Download'
-                      )}
+                          'Install'
+                        )}
                     </Button>
 
                     <Button variant="ghost" onClick={() => {
@@ -157,9 +156,14 @@ const InstallPrompt = () => {
                       const until = Date.now() + 60 * 60 * 1000;
                       try { localStorage.setItem('pwa-snoozed', String(until)); } catch (e) { console.error('Failed to set snooze', e); }
                       setShowPrompt(false);
-                      setShowManual(false);
                     }} className="ml-2">
                       Snooze 1h
+                    </Button>
+                    <Button variant="ghost" onClick={() => {
+                      // Just dismiss modal - will reappear on next interval
+                      setShowPrompt(false);
+                    }} className="ml-2">
+                      Try Again
                     </Button>
                   </>
                 ) : (
@@ -172,18 +176,7 @@ const InstallPrompt = () => {
           </div>
         </div>
 
-        {/* Manual install instructions for desktop */}
-        {showManual && (
-          <div className="mt-6 p-4 rounded-xl bg-muted/40 border border-border">
-            <div className="font-semibold text-lg text-foreground mb-2">How to install LoveMatch on your PC</div>
-            <ol className="list-decimal ml-5 text-muted-foreground text-sm space-y-1">
-              <li>Click the browser's <b>Install</b> or <b>Add to Home Screen</b> button in the address bar (usually a plus icon).</li>
-              <li>If you don't see an install button, open your browser menu and look for <b>Install App</b> or <b>Add to Home Screen</b>.</li>
-              <li>Follow the prompts to add LoveMatch to your device.</li>
-            </ol>
-            <div className="mt-3 text-xs text-muted-foreground">Supported on Chrome, Edge, Brave, and other modern browsers.</div>
-          </div>
-        )}
+        
       </div>
     </div>
   );
