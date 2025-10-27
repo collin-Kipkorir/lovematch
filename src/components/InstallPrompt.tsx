@@ -10,11 +10,29 @@ const InstallPrompt = () => {
   const modalRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
+    // Check if installed
     const hasInstalled = localStorage.getItem('pwa-installed');
-    if (hasInstalled) setShowPrompt(false);
+    if (hasInstalled) {
+      setShowPrompt(false);
+      return;
+    }
+
+    // Check if within 10-minute cooldown
+    const lastDismissed = localStorage.getItem('pwa-last-dismissed');
+    if (lastDismissed) {
+      const lastDismissTime = parseInt(lastDismissed, 10);
+      const tenMinutes = 10 * 60 * 1000; // 10 minutes in milliseconds
+      if (Date.now() - lastDismissTime < tenMinutes) {
+        setShowPrompt(false);
+      }
+    }
   }, [setShowPrompt]);
 
-  const handleDismiss = () => setShowPrompt(false);
+  const handleDismiss = () => {
+    // Store the current timestamp when dismissed
+    localStorage.setItem('pwa-last-dismissed', Date.now().toString());
+    setShowPrompt(false);
+  };
 
   const showInstallNotification = async () => {
     if (!('Notification' in window)) return;
@@ -27,7 +45,6 @@ const InstallPrompt = () => {
           icon: '/opengraph-image.png',
           badge: '/opengraph-image.png',
           tag: 'lovematch-installed',
-          timestamp: Date.now(),
           requireInteraction: true
         });
 
